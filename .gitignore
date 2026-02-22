@@ -1,0 +1,49 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment Variables (CRITICAL)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+# Keep example files
+!.env.example
+
+# Build
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# Local/Private
+private/
+secrets/

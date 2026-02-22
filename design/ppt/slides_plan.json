@@ -1,0 +1,45 @@
+{
+  "title": "欧美写实法师模板 · 四大学院角色设定",
+  "total_slides": 13,
+  "slides": [
+    {
+      "slide_number": 1,
+      "page_type": "cover",
+      "content": "标题：欧美写实法师模板\n副标题：四大学院 · 男/女各一 · 三视图/材质/配色/变体\n备注：基于风格DNA统一约束输出"
+    },
+    {
+      "slide_number": 2,
+      "page_type": "content",
+      "content": "风格DNA（轮廓与比例）\n- 写实但可读性优先（7.5–8头身）\n- 焦点三角：脸/胸徽/武器握区\n- 大中小层级：披风与护肩做中形，扣具做小形\n- 负形透气：武器与身体留空"
+    },
+    {
+      "slide_number": 3,
+      "page_type": "content",
+      "content": "风格DNA（材质与光影）\n- 主光明确（45°侧上），辅光只补信息\n- 金属：硬窄高光 + 冷反射\n- 皮革：宽柔高光 + 油光新旧区分\n- 布料：散弱高光 + 受力褶皱\n- 特殊材质：符文能量仅在焦点区出现"
+    },
+    {
+      "slide_number": 4,
+      "page_type": "content",
+      "content": "产出规范（PSD 分层建议）\n- 组：BODY / FACE / HAIR / ROBE_BASE / ROBE_TRIM / ARMOR_METAL / LEATHER / ACCESSORIES / WEAPON / RUNES_VFX / SHADOW / HIGHLIGHT\n- 三视图：front/side/back\n- 每套：配色比例、材质标注、细节放大图、3种变体"
+    },
+
+    { "slide_number": 5, "page_type": "content", "content": "学院一：Gryffindor（狮焰）\n男法师模板：Lion-Ember Adept\n- 主色：深绯红 60%  辅色：煤黑 30%  点缀：古金 10%\n- 材质：金属护肩/胸扣；皮革腰封/腕带；布料外袍/披风；符文发光绣线\n- 三视图：Front/Side/Back + 细节：武器纹样/胸徽符文\n- 变体：性别切换/年龄变化/阵营转换" },
+    { "slide_number": 6, "page_type": "content", "content": "学院一：Gryffindor（狮焰）\n女法师模板：Lion-Ember Adept\n- 轮廓保持：宽肩披风 + 胸徽焦点\n- 剪裁变化：腰线更高、下摆开衩更灵动\n- 三视图与细节同规格\n- 变体同规格" },
+
+    { "slide_number": 7, "page_type": "content", "content": "学院二：Slytherin（蛇影）\n男法师模板：Serpent-Veil Savant\n- 主色：深绿黑 60%  辅色：墨黑 30%  点缀：冷银 10%\n- 材质：皮革束带系统；金属护符框/匕首护手；布料高领长袍；雾化符文纱\n- 三视图：Front/Side/Back + 细节：护符刻纹/袖口扣具\n- 变体：性别切换/年龄变化/阵营转换" },
+    { "slide_number": 8, "page_type": "content", "content": "学院二：Slytherin（蛇影）\n女法师模板：Serpent-Veil Savant\n- 轮廓保持：S曲线 + 高领结构\n- 剪裁变化：肩线更锐、披肩更短以突出敏捷\n- 三视图与细节同规格\n- 变体同规格" },
+
+    { "slide_number": 9, "page_type": "content", "content": "学院三：Ravenclaw（鸦智）\n男法师模板：Aether-Quill Magister\n- 主色：深蓝 60%  辅色：深棕 30%  点缀：黄铜金 10%\n- 材质：皮革书袋系统；金属肩饰/法杖环；布料学者长袍；悬浮符文页\n- 三视图：Front/Side/Back + 细节：法阵符文/铭牌\n- 变体：性别切换/年龄变化/阵营转换" },
+    { "slide_number": 10, "page_type": "content", "content": "学院三：Ravenclaw（鸦智）\n女法师模板：Aether-Quill Magister\n- 轮廓保持：层叠剪裁 + 书袋系统\n- 剪裁变化：披肩更宽，裙摆分片更明显\n- 三视图与细节同规格\n- 变体同规格" },
+
+    { "slide_number": 11, "page_type": "content", "content": "学院四：Hufflepuff（獾炉）\n男法师模板：Gilded-Hearth Warden\n- 主色：赭金 60%  辅色：炭黑 30%  点缀：骨白 10%\n- 材质：皮革工具腰带；金属扣件/点缀；布料厚实袍面；暖光护符/蜂蜡封印\n- 三视图：Front/Side/Back + 细节：封蜡符章/腰带工具\n- 变体：性别切换/年龄变化/阵营转换" },
+    { "slide_number": 12, "page_type": "content", "content": "学院四：Hufflepuff（獾炉）\n女法师模板：Gilded-Hearth Warden\n- 轮廓保持：厚重垂坠 + 暖光焦点\n- 剪裁变化：护肩体块更集中，裙摆更整洁\n- 三视图与细节同规格\n- 变体同规格" },
+
+    {
+      "slide_number": 13,
+      "page_type": "content",
+      "content": "落地到产品（主页展示）\n- 根据性别+学院映射模板\n- 默认无素材时展示“符文渐变占位图”\n- 后续导入素材：/assets/characters/{academy}/{male|female}/{front|side|back}.png\n- 细节：/assets/characters/{academy}/{male|female}/details/*.png"
+    }
+  ]
+}
+

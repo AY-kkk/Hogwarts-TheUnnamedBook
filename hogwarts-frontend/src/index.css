@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --font-title: "Cinzel", serif;
+  --font-body: "EB Garamond", serif;
+  --font-meta: "Lora", serif;
+
+  --color-parchment: #F4EBD0;
+  --color-ink: #2C1E14;
+  --color-magic: #D4AF37;
+  --color-blood: #722F37;
+  --color-shadow: rgba(0, 0, 0, 0.05);
+
+  /* House Colors */
+  --color-gryffindor-primary: #AE0001;
+  --color-gryffindor-secondary: #EEBA30;
+  
+  --color-slytherin-primary: #2A623D;
+  --color-slytherin-secondary: #AAAAAA;
+
+  --color-ravenclaw-primary: #222F5B;
+  --color-ravenclaw-secondary: #946B2D;
+
+  --color-hufflepuff-primary: #ECB939;
+  --color-hufflepuff-secondary: #372E29;
+
+  /* Magic UI Tokens */
+  --color-hogwarts-bg: #0F172A;
+  --color-hogwarts-dark: #020617;
+  --color-hogwarts-card: #1E293B;
+  
+  --color-parchment-100: #FDF6E3;
+  --color-parchment-200: #F0E6D2;
+  --color-parchment-300: #D4C4A8;
+  --color-parchment-text: #2C241B;
+  
+  --color-magic-gold: #C5A059;
+  --color-magic-light: #E5C17C;
+  --color-magic-dark: #8A6D3B;
+  --color-magic-glow: #FFD700;
+
+  --image-paper-texture: url('/paper-texture.png');
+}
+
+@layer utilities {
+  .bg-noise {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.5'/%3E%3C/svg%3E");
+  }
+  
+  .text-ink-bleed {
+    text-shadow: 0 0 1px rgba(44, 30, 20, 0.1);
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-parchment text-ink font-body antialiased;
+    background-image: repeating-linear-gradient(
+      transparent,
+      transparent 24px,
+      rgba(0, 0, 0, 0.05) 25px
+    );
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-title font-bold tracking-wide;
+  }
+}
+
+/* Custom scrollbar for webkit */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent; 
+}
+
+::-webkit-scrollbar-thumb {
+  background: #8b7d6b; 
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6d5f4f; 
+}

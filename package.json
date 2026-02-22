@@ -1,0 +1,12 @@
+{
+  "name": "hogwarts-simulator-root",
+  "private": true,
+  "scripts": {
+    "install:frontend": "cd hogwarts-frontend && npm install",
+    "build": "cd hogwarts-frontend && npm run build",
+    "dev": "cd hogwarts-frontend && npm run dev"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
