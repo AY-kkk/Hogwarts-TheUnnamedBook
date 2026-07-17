@@ -1,0 +1,34 @@
+{
+  "prompt_version": "prompt-2026.07.17.1",
+  "rules_version": "rules-2026.07.17.1",
+  "rules": {
+    "core": "system_core_rules.md",
+    "prologue": "system_prologue_rules.md"
+  },
+  "prompts": {
+    "intent": {
+      "file": "intent.md",
+      "variables": ["context_summary", "user_input"]
+    },
+    "simulator": {
+      "file": "simulator.md",
+      "variables": ["core_rules", "status_json", "user_input"]
+    },
+    "narrator_action": {
+      "file": "narrator_action.md",
+      "variables": ["context_summary", "simulation_result", "user_input"]
+    },
+    "narrator_chat": {
+      "file": "narrator_chat.md",
+      "variables": ["context_summary", "user_input"]
+    },
+    "prologue": {
+      "file": "prologue_prompt.md",
+      "variables": ["core_rules", "prologue_rules", "profile_json", "self_description"]
+    },
+    "chapter_title": {
+      "file": "chapter_title.md",
+      "variables": ["context_summary", "user_input"]
+    }
+  }
+}

@@ -64,6 +64,15 @@ export interface Log {
   content: string;
   type: 'user' | 'ai' | 'system';
   timestamp: number;
+  generation?: GenerationMetadata;
+}
+
+export interface GenerationMetadata {
+  model: string;
+  prompt_version: string;
+  rules_version: string;
+  request_id?: string;
+  orchestration_trace?: string[];
 }
 
 // Define the interface for the WorldLog table

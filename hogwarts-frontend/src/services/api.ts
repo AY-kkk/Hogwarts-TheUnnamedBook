@@ -4,6 +4,7 @@ import { getActiveTimelineLogs } from './pensieveResume';
 import { apiUrl } from '../config/api';
 import { requirePrivacyConsent } from './privacy';
 import { apiFetch, getSessionToken } from './session';
+import type { GenerationMetadata } from '../lib/db';
 
 const API_URL = apiUrl('/api/chat');
 
@@ -36,7 +37,10 @@ export async function sendChatRequest(
   onMessage: (chunk: string) => void,
   onComplete: () => void,
   onError: (err: unknown) => void,
-  options?: { signal?: AbortSignal }
+  options?: {
+    signal?: AbortSignal;
+    onMetadata?: (metadata: GenerationMetadata) => void | Promise<void>;
+  }
 ) {
   try {
     await requirePrivacyConsent();
@@ -86,6 +90,17 @@ export async function sendChatRequest(
         // if the server emits an error message, throw an exception
         // so it gets handled by the onerror callback below:
         if (msg.event === 'status') {
+          return;
+        }
+        if (msg.event === 'metadata') {
+          try {
+            const result = options?.onMetadata?.(JSON.parse(msg.data) as GenerationMetadata);
+            void Promise.resolve(result).catch((error) => {
+              console.error('Could not save generation metadata', error);
+            });
+          } catch (error) {
+            console.error('Invalid generation metadata', error);
+          }
           return;
         }
         if (msg.event === 'error') {

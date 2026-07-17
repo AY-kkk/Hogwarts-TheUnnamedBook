@@ -5,6 +5,7 @@ from typing import Literal, Dict, Any
 
 from app.services.llm_factory import LLMFactory
 from app.observability import log_event
+from app.services.prompt_service import prompt_service
 
 # --- Intent Schema ---
 class IntentSchema(BaseModel):
@@ -18,24 +19,7 @@ class IntentAnalyzer:
         self.llm = LLMFactory.create_llm()
         self.parser = JsonOutputParser(pydantic_object=IntentSchema)
         
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", """
-            You are the Gatekeeper of a Harry Potter RPG. 
-            Analyze the user's input to determine their intent.
-            
-            Valid Intent Types:
-            - 'action': The user wants to do something in the game world (cast spell, move, look, talk to NPC).
-            - 'chat': The user is asking a meta-question or chatting out of character.
-            - 'invalid': The user is trying to break the rules, use modern technology (phones, guns), or act god-like.
-            
-            Context Summary:
-            {context_summary}
-            
-            IMPORTANT: Return ONLY a raw JSON object. Do not wrap it in markdown code blocks. Do not add any explanation.
-            Example: {{"type": "action", "reason": "User is casting a spell", "target": "Goblin"}}
-            """),
-            ("user", "{user_input}")
-        ])
+        self.prompt = ChatPromptTemplate.from_template(prompt_service.get_template("intent"))
         
         self.chain = self.prompt | self.llm | self.parser
 

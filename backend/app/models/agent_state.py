@@ -1,19 +1,12 @@
-from typing import TypedDict, List, Dict, Any, Annotated
-from langgraph.graph import StateGraph, END
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
-import operator
+from typing import Any, TypedDict
 
-class GameState(TypedDict):
-    # Core inputs
+
+class GameState(TypedDict, total=False):
     user_input: str
-    context: Dict[str, Any]
-    system_prompt: str
-    
-    # Internal flow control
-    intent: str  # 'action', 'chat', 'invalid'
+    context: dict[str, Any]
+    intent: str
     simulation_result: str
-    
-    # Final outputs
     narrative: str
-    state_update: str # JSON string
-    final_response: str
+    prompt_version: str
+    rules_version: str
+    orchestration_trace: list[str]

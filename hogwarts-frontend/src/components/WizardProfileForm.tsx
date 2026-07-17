@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createCharacterUuid } from '../lib/db';
+import type { GenerationMetadata } from '../lib/db';
 import { cn } from '../lib/utils';
 import { Sparkles, Scroll, Feather } from 'lucide-react';
 import { requirePrivacyConsent } from '../services/privacy';
@@ -85,7 +86,10 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
         const errorBody = await storyRes.text();
         throw new Error(`无法开启故事（${storyRes.status}）${errorBody ? `：${errorBody}` : ''}`);
       }
-      const { narrative } = await storyRes.json();
+      const { narrative, metadata } = await storyRes.json() as {
+        narrative?: string;
+        metadata?: GenerationMetadata;
+      };
 
       if (typeof narrative !== 'string' || !narrative.trim()) {
         throw new Error("‘自我’描述未触发分支，请检查档案完整性");
@@ -121,7 +125,8 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
             flexibility: "Unknown"
           }
         },
-        narrative
+        narrative,
+        metadata
       );
 
       onComplete();

@@ -189,7 +189,12 @@ function App() {
         chatAbortRef.current = null;
       }
       ,
-      { signal: chatAbortRef.current.signal }
+      {
+        signal: chatAbortRef.current.signal,
+        onMetadata: async (generation) => {
+          if (aiLogId) await db.logs.update(aiLogId, { generation });
+        },
+      }
     );
   };
 

@@ -26,6 +26,7 @@ from app.observability import (
     new_request_id,
     request_id_context,
 )
+from app.services.prompt_service import prompt_service
 
 security_settings = SecuritySettings.from_env()
 session_tokens = SessionTokenManager(
@@ -230,6 +231,8 @@ async def health_check():
         "uptime_seconds": round(time.time() - app_started_at, 1),
         "model_provider": model_provider,
         "model": model_name,
+        "prompt_version": prompt_service.prompt_version,
+        "rules_version": prompt_service.rules_version,
     }
 
 
@@ -266,7 +269,11 @@ async def start_story(request: StoryStartRequest, _session_id: str = Depends(req
         settle_ai_budget(reservation, "story_start", input_characters, None, "error")
         raise
     settle_ai_budget(reservation, "story_start", input_characters, len(narrative), "success")
-    return {"narrative": narrative}
+    return {
+        "narrative": narrative,
+        "metadata": prompt_service.metadata()
+        | {"model": model_name, "request_id": request_id_context.get()},
+    }
 
 @app.post("/api/chapter/title", response_model=ChapterTitleResponse)
 async def chapter_title(request: ChapterTitleRequest, _session_id: str = Depends(require_api_access)):
@@ -275,18 +282,7 @@ async def chapter_title(request: ChapterTitleRequest, _session_id: str = Depends
     from langchain_core.output_parsers import StrOutputParser
 
     llm = LLMFactory.create_llm()
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """
-你是“章节标题生成器”。请根据用户本轮输入与上下文摘要，生成一个中文标题名（仅标题名，不要包含“第x章:”前缀）。
-
-[强约束]
-1) 标题名长度：8-20个汉字
-2) 禁止出现任何标点符号、特殊符号或空格
-3) 必须与本轮输入高度相关，能概括核心事件或意图
-4) 只输出标题名，不要输出任何解释
-"""),
-        ("user", "用户本轮输入：{user_input}\n上下文摘要：{context_summary}\n请输出标题名：")
-    ])
+    prompt = ChatPromptTemplate.from_template(prompt_service.get_template("chapter_title"))
     chain = prompt | llm | StrOutputParser()
     input_characters = len(request.user_input) + len(request.context_summary)
     reservation = reserve_ai_budget(_session_id, input_characters, 200)
@@ -334,7 +330,8 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
             initial_state = {
                 "user_input": request.user_input,
                 "context": request.context,
-                "system_prompt": "" # Will be loaded by agents if needed
+                **prompt_service.metadata(),
+                "orchestration_trace": [],
             }
             
             # Run the graph (invoke returns the final state)
@@ -363,6 +360,14 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
             final_state = await task
             narrative = final_state.get("narrative", "")
             settle("success", len(narrative))
+
+            metadata = {
+                **prompt_service.metadata(),
+                "model": model_name,
+                "orchestration_trace": final_state.get("orchestration_trace", []),
+                "request_id": request_id_context.get(),
+            }
+            yield f"event: metadata\ndata: {json.dumps(metadata, ensure_ascii=False)}\n\n"
             
             # Simulate streaming the result
             chunk_size = 20

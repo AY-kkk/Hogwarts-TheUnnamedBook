@@ -1,4 +1,4 @@
-import { db, type Character } from '../lib/db';
+import { db, type Character, type GenerationMetadata } from '../lib/db';
 
 export const MAX_CHARACTER_SLOTS = 3;
 
@@ -17,7 +17,8 @@ export async function assertCharacterSlotAvailable(): Promise<void> {
 
 export async function createCharacterWithOpeningLog(
   character: Character,
-  openingNarrative: string
+  openingNarrative: string,
+  generation?: GenerationMetadata
 ): Promise<number> {
   if (!character.uuid) throw new Error('新角色缺少本地 UUID');
 
@@ -36,6 +37,7 @@ export async function createCharacterWithOpeningLog(
       content: openingNarrative,
       type: 'ai',
       timestamp: Date.now(),
+      generation,
     });
     return characterId;
   });

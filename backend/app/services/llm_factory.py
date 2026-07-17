@@ -45,5 +45,3 @@ class LLMFactory:
             )
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
-
-llm = LLMFactory.create_llm()
