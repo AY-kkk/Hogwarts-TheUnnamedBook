@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_API_BASE_URL: https://api.invalid.example
+      VITE_OPERATOR_NAME: CI Operator
+      VITE_PRIVACY_CONTACT: privacy@example.com
+      VITE_MODEL_DATA_DESTINATIONS: CI Model Region
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: hogwarts-frontend/package-lock.json
+      - run: npm ci --prefix hogwarts-frontend
+      - run: npm --prefix hogwarts-frontend test
+      - run: npm --prefix hogwarts-frontend run lint
+      - run: npm --prefix hogwarts-frontend run build
+      - run: npm --prefix hogwarts-frontend audit --omit=dev --audit-level=high
+
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: backend
+      APP_ENV: test
+      SESSION_SECRET: ci-session-secret-with-at-least-32-characters
+      METRICS_TOKEN: ci-metrics-token-with-at-least-32-characters
+      CORS_ALLOWED_ORIGINS: https://frontend.invalid.example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt pytest httpx
+      - run: pytest -q backend/tests
+      - run: python -m compileall -q backend/app
+      - run: docker build -f backend/Dockerfile -t unnamed-book-api:ci .

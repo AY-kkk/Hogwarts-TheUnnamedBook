@@ -1,0 +1,138 @@
+name: Release or rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub environment
+        required: true
+        type: choice
+        options: [staging, production]
+      release_kind:
+        description: Normal deployment or rollback to the selected ref
+        required: true
+        type: choice
+        options: [deploy, rollback]
+      ref:
+        description: Immutable commit SHA to release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      VITE_OPERATOR_NAME: ${{ vars.VITE_OPERATOR_NAME }}
+      VITE_PRIVACY_CONTACT: ${{ vars.VITE_PRIVACY_CONTACT }}
+      VITE_MODEL_DATA_DESTINATIONS: ${{ vars.VITE_MODEL_DATA_DESTINATIONS }}
+      IP_AUTHORIZATION_REFERENCE: ${{ vars.IP_AUTHORIZATION_REFERENCE }}
+      LEGAL_REVIEW_REFERENCE: ${{ vars.LEGAL_REVIEW_REFERENCE }}
+      RELEASE_ONCALL_OWNER: ${{ vars.RELEASE_ONCALL_OWNER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Resolve immutable version
+        id: version
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse '${{ inputs.ref }}')"
+
+      - name: Validate release configuration
+        run: python .github/scripts/check_release_config.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: hogwarts-frontend/package-lock.json
+      - run: npm ci --prefix hogwarts-frontend
+      - run: npm --prefix hogwarts-frontend test
+      - run: npm --prefix hogwarts-frontend run lint
+      - run: npm --prefix hogwarts-frontend run build
+      - run: npm --prefix hogwarts-frontend audit --omit=dev --audit-level=high
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt pytest httpx
+      - env:
+          PYTHONPATH: backend
+          APP_ENV: test
+          SESSION_SECRET: release-test-session-secret-with-at-least-32-characters
+          METRICS_TOKEN: release-test-metrics-token-with-at-least-32-characters
+          CORS_ALLOWED_ORIGINS: https://frontend.invalid.example
+        run: pytest -q backend/tests
+
+      - name: Publish backend image
+        id: image
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}/api:${{ steps.version.outputs.sha }}"
+          echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker build -f backend/Dockerfile -t "$image" .
+          docker push "$image"
+          echo "uri=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy backend image
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.BACKEND_DEPLOY_HOOK_URL }}
+          DEPLOY_HOOK_TOKEN: ${{ secrets.BACKEND_DEPLOY_HOOK_TOKEN }}
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: |
+          payload=$(jq -n --arg image "$IMAGE_URI" --arg sha "${{ steps.version.outputs.sha }}" '{image:$image,sha:$sha}')
+          curl --fail-with-body --retry 3 \
+            -X POST "$DEPLOY_HOOK_URL" \
+            -H "Authorization: Bearer $DEPLOY_HOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$payload"
+
+      - name: Deploy frontend
+        id: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          args=(deploy --yes --token "$VERCEL_TOKEN")
+          if [ "${{ inputs.environment }}" = "production" ]; then args+=(--prod); fi
+          url=$(npx --yes vercel@latest "${args[@]}" \
+            --build-env VITE_API_BASE_URL="$VITE_API_BASE_URL" \
+            --build-env VITE_OPERATOR_NAME="$VITE_OPERATOR_NAME" \
+            --build-env VITE_PRIVACY_CONTACT="$VITE_PRIVACY_CONTACT" \
+            --build-env VITE_MODEL_DATA_DESTINATIONS="$VITE_MODEL_DATA_DESTINATIONS")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke check deployed services
+        env:
+          BACKEND_HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL }}
+          FRONTEND_URL: ${{ steps.frontend.outputs.url }}
+        run: |
+          curl --fail-with-body --retry 12 --retry-delay 10 "$BACKEND_HEALTH_URL/health"
+          curl --fail-with-body --retry 6 --retry-delay 5 "$FRONTEND_URL"
+
+      - name: Record release
+        run: |
+          {
+            echo "### ${{ inputs.release_kind }} to ${{ inputs.environment }}"
+            echo "- Commit: ${{ steps.version.outputs.sha }}"
+            echo "- Backend: ${{ steps.image.outputs.uri }}"
+            echo "- Frontend: ${{ steps.frontend.outputs.url }}"
+            echo "- Operator: $GITHUB_ACTOR"
+          } >> "$GITHUB_STEP_SUMMARY"
