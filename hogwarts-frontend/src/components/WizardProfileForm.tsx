@@ -3,6 +3,7 @@ import { db, addLog } from '../lib/db';
 import { cn } from '../lib/utils';
 import { Sparkles, Scroll, Feather } from 'lucide-react';
 import { apiUrl } from '../config/api';
+import { requirePrivacyConsent } from '../services/privacy';
 
 interface WizardProfileFormProps {
   onComplete: () => void;
@@ -62,6 +63,8 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
     setLoadingText("正在登记学籍...");
 
     try {
+      await requirePrivacyConsent();
+
       // 1. Register Profile
       const profileRes = await fetch(apiUrl('/api/wizard-profile'), {
         method: 'POST',

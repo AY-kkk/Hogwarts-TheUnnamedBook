@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ParchmentLayout } from './components/layout/ParchmentLayout';
 import { MemoryBar } from './components/layout/MemoryBar';
 import { NarrativeEngine } from './components/layout/NarrativeEngine';
@@ -12,6 +12,8 @@ import { parseAndApplyState } from './services/tagParser';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { cn } from './lib/utils';
 import { getActiveTimelineLogs } from './services/pensieveResume';
+import { PrivacyConsent } from './components/compliance/PrivacyConsent';
+import { hasPrivacyConsent } from './services/privacy';
 
 type AppState = 'landing' | 'selection' | 'create' | 'game';
 
@@ -20,6 +22,9 @@ function App() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isMemoryExpanded, setIsMemoryExpanded] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [privacyRequired, setPrivacyRequired] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const chatAbortRef = useRef<AbortController | null>(null);
   
   // Selected character ID
@@ -37,10 +42,68 @@ function App() {
     [activeCharacter?.uuid]
   );
 
+  useEffect(() => {
+    let active = true;
+    hasPrivacyConsent().then((accepted) => {
+      if (active) setPrivacyAccepted(accepted);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Initial Load Handler
-  const handleLoadComplete = () => {
+  const handleLoadComplete = async () => {
+    const accepted = await hasPrivacyConsent();
+    setPrivacyAccepted(accepted);
+    if (!accepted) {
+      setPrivacyRequired(true);
+      setPrivacyOpen(true);
+      return;
+    }
     setAppState('selection');
   };
+
+  const handlePrivacyAccepted = () => {
+    setPrivacyAccepted(true);
+    setPrivacyRequired(false);
+    setPrivacyOpen(false);
+    setAppState('selection');
+  };
+
+  const handlePrivacyRevoked = () => {
+    if (chatAbortRef.current) chatAbortRef.current.abort();
+    setPrivacyAccepted(false);
+    setPrivacyRequired(false);
+    setPrivacyOpen(false);
+    setLoading(false);
+    setActiveCharacterId(null);
+    setAppState('landing');
+  };
+
+  const withPrivacyControls = (content: ReactNode) => (
+    <>
+      {content}
+      <button
+        type="button"
+        onClick={() => {
+          setPrivacyRequired(false);
+          setPrivacyOpen(true);
+        }}
+        className="fixed bottom-4 left-4 z-[90] rounded-full border border-white/20 bg-black/60 px-3 py-2 text-xs text-white/80 shadow-lg backdrop-blur hover:text-white"
+      >
+        隐私与数据
+      </button>
+      <PrivacyConsent
+        isOpen={privacyOpen}
+        required={privacyRequired}
+        hasConsent={privacyAccepted}
+        onAccept={handlePrivacyAccepted}
+        onClose={() => setPrivacyOpen(false)}
+        onRevoke={handlePrivacyRevoked}
+      />
+    </>
+  );
 
   const handleCharacterSelect = (char: Character) => {
     if (char.id) {
@@ -134,11 +197,11 @@ function App() {
 
   // Render based on state
   if (appState === 'landing') {
-    return <LandingPage onEnter={handleLoadComplete} />;
+    return withPrivacyControls(<LandingPage onEnter={handleLoadComplete} />);
   }
 
   if (appState === 'selection') {
-    return (
+    return withPrivacyControls(
       <CharacterSelection 
         onSelectCharacter={handleCharacterSelect}
         onCreateNew={handleCreateNew}
@@ -147,11 +210,11 @@ function App() {
   }
 
   if (appState === 'create') {
-    return <WizardProfileForm onComplete={handleCreationComplete} />;
+    return withPrivacyControls(<WizardProfileForm onComplete={handleCreationComplete} />);
   }
 
   // Game State
-  return (
+  return withPrivacyControls(
     <div className="flex bg-[#E8DFC5]">
       {/* 1. Left Memory Bar */}
       {activeCharacter && (

@@ -2,11 +2,13 @@ import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { db } from '../lib/db';
 import { getActiveTimelineLogs } from './pensieveResume';
 import { apiUrl } from '../config/api';
+import { requirePrivacyConsent } from './privacy';
 
 const API_URL = apiUrl('/api/chat');
 const CHAPTER_TITLE_URL = apiUrl('/api/chapter/title');
 
 export async function generateChapterTitle(userInput: string, contextSummary: string, signal?: AbortSignal) {
+  await requirePrivacyConsent();
   const resp = await fetch(CHAPTER_TITLE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -29,6 +31,8 @@ export async function sendChatRequest(
   options?: { signal?: AbortSignal }
 ) {
   try {
+    await requirePrivacyConsent();
+
     // 1. Assemble Context
     const character = characterUuid
       ? await db.character.where('uuid').equals(characterUuid).first()
