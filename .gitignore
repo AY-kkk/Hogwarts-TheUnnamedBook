@@ -39,6 +39,7 @@ htmlcov/
 # Build
 dist/
 build/
+output/
 
 # Logs
 logs/

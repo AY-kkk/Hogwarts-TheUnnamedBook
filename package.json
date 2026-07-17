@@ -4,6 +4,8 @@
   "scripts": {
     "install:frontend": "npm ci --prefix hogwarts-frontend",
     "build": "cd hogwarts-frontend && npm run build",
+    "quality": "bash scripts/quality_gate.sh",
+    "security:secrets": "python3 scripts/scan_secrets.py",
     "dev": "npm run dev:frontend",
     "dev:frontend": "cd hogwarts-frontend && npm run dev",
     "dev:backend": "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 3000"

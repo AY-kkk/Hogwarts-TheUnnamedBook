@@ -167,8 +167,6 @@ export function MemoryBar({ isExpanded, onToggle, character }: MemoryBarProps) {
                   <button 
                     onClick={async () => {
                       if(confirm("Reset World? This cannot be undone.")) {
-                         // Import db dynamically to avoid circular dependency issues if any, though here it's fine
-                         const { db } = await import('../../lib/db');
                          await db.delete();
                          window.location.reload();
                       }
