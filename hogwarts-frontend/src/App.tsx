@@ -15,6 +15,8 @@ import { getActiveTimelineLogs } from './services/pensieveResume';
 import { PrivacyConsent } from './components/compliance/PrivacyConsent';
 import { hasPrivacyConsent } from './services/privacy';
 import { touchCharacter } from './services/characters';
+import { AgeGate } from './components/compliance/AgeGate';
+import { hasAgeAcknowledgement } from './services/safety';
 
 type AppState = 'landing' | 'selection' | 'create' | 'game';
 
@@ -26,6 +28,7 @@ function App() {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [privacyRequired, setPrivacyRequired] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [ageOpen, setAgeOpen] = useState(false);
   const chatAbortRef = useRef<AbortController | null>(null);
   
   // Selected character ID
@@ -45,8 +48,8 @@ function App() {
 
   useEffect(() => {
     let active = true;
-    hasPrivacyConsent().then((accepted) => {
-      if (active) setPrivacyAccepted(accepted);
+    hasPrivacyConsent().then((privacy) => {
+      if (active) setPrivacyAccepted(privacy);
     });
     return () => {
       active = false;
@@ -54,7 +57,7 @@ function App() {
   }, []);
 
   // Initial Load Handler
-  const handleLoadComplete = async () => {
+  const continueAfterAgeGate = async () => {
     const accepted = await hasPrivacyConsent();
     setPrivacyAccepted(accepted);
     if (!accepted) {
@@ -63,6 +66,19 @@ function App() {
       return;
     }
     setAppState('selection');
+  };
+
+  const handleLoadComplete = async () => {
+    if (!(await hasAgeAcknowledgement())) {
+      setAgeOpen(true);
+      return;
+    }
+    await continueAfterAgeGate();
+  };
+
+  const handleAgeAccepted = () => {
+    setAgeOpen(false);
+    void continueAfterAgeGate();
   };
 
   const handlePrivacyAccepted = () => {
@@ -102,6 +118,14 @@ function App() {
         onAccept={handlePrivacyAccepted}
         onClose={() => setPrivacyOpen(false)}
         onRevoke={handlePrivacyRevoked}
+      />
+      <AgeGate
+        isOpen={ageOpen}
+        onAccept={handleAgeAccepted}
+        onDecline={() => {
+          setAgeOpen(false);
+          setAppState('landing');
+        }}
       />
     </>
   );
@@ -247,7 +271,13 @@ function App() {
            {/* Header / Title could go here if needed, but narrative drives the show */}
            
            {/* 3. Narrative Engine (Chat) */}
-           <NarrativeEngine logs={logs || []} loading={loading} />
+           {activeCharacter?.uuid && (
+             <NarrativeEngine
+               logs={logs || []}
+               loading={loading}
+               characterUuid={activeCharacter.uuid}
+             />
+           )}
         </div>
       </ParchmentLayout>
 

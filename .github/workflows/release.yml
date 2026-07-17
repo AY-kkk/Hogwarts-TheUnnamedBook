@@ -38,6 +38,7 @@ jobs:
       VITE_OPERATOR_NAME: ${{ vars.VITE_OPERATOR_NAME }}
       VITE_PRIVACY_CONTACT: ${{ vars.VITE_PRIVACY_CONTACT }}
       VITE_MODEL_DATA_DESTINATIONS: ${{ vars.VITE_MODEL_DATA_DESTINATIONS }}
+      VITE_MINIMUM_AGE: ${{ vars.VITE_MINIMUM_AGE }}
       IP_AUTHORIZATION_REFERENCE: ${{ vars.IP_AUTHORIZATION_REFERENCE }}
       LEGAL_REVIEW_REFERENCE: ${{ vars.LEGAL_REVIEW_REFERENCE }}
       RELEASE_ONCALL_OWNER: ${{ vars.RELEASE_ONCALL_OWNER }}
@@ -116,7 +117,8 @@ jobs:
             --build-env VITE_API_BASE_URL="$VITE_API_BASE_URL" \
             --build-env VITE_OPERATOR_NAME="$VITE_OPERATOR_NAME" \
             --build-env VITE_PRIVACY_CONTACT="$VITE_PRIVACY_CONTACT" \
-            --build-env VITE_MODEL_DATA_DESTINATIONS="$VITE_MODEL_DATA_DESTINATIONS")
+            --build-env VITE_MODEL_DATA_DESTINATIONS="$VITE_MODEL_DATA_DESTINATIONS" \
+            --build-env VITE_MINIMUM_AGE="$VITE_MINIMUM_AGE")
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Smoke check deployed services

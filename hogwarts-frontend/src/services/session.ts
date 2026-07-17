@@ -66,3 +66,16 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   const response = await send(false);
   return response.status === 401 ? send(true) : response;
 }
+
+export async function getApiErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const payload = await response.clone().json() as {
+      detail?: string | { message?: string };
+    };
+    if (typeof payload.detail === 'string') return payload.detail;
+    if (typeof payload.detail?.message === 'string') return payload.detail.message;
+  } catch {
+    // Non-JSON gateway errors use the caller's safe fallback.
+  }
+  return fallback;
+}

@@ -1,7 +1,7 @@
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Dict, Any
+from typing import Any, Dict, Literal
 import time
 import asyncio
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -27,6 +27,7 @@ from app.observability import (
     request_id_context,
 )
 from app.services.prompt_service import prompt_service
+from app.content_safety import inspect_content
 
 security_settings = SecuritySettings.from_env()
 session_tokens = SessionTokenManager(
@@ -87,6 +88,17 @@ class ChapterTitleRequest(BaseModel):
 class SessionResponse(BaseModel):
     token: str
     expires_in: int
+
+class ContentReportRequest(BaseModel):
+    character_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    log_id: int = Field(gt=0)
+    request_id: str | None = Field(default=None, min_length=8, max_length=64)
+    category: Literal["unsafe", "minor_safety", "privacy", "copyright", "other"]
+    note: str = Field(default="", max_length=500)
+
+class ContentReportResponse(BaseModel):
+    report_id: str
+    status: str
 
 class ChapterTitleResponse(BaseModel):
     title: str
@@ -211,6 +223,26 @@ def settle_ai_budget(
         session_estimated_cost_usd=round(session_total, 6),
     )
 
+
+def require_safe_content(text: str) -> None:
+    decision = inspect_content(text)
+    if not decision.allowed:
+        metrics.increment("content_safety_blocks_total", category=decision.category, stage="input")
+        log_event("content_safety_block", category=decision.category, stage="input")
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "content_blocked", "category": decision.category, "message": decision.user_message},
+        )
+
+
+def moderate_generated_content(text: str) -> tuple[str, str]:
+    decision = inspect_content(text, is_output=True)
+    if decision.allowed:
+        return text, "success"
+    metrics.increment("content_safety_blocks_total", category=decision.category, stage="output")
+    log_event("content_safety_block", category=decision.category, stage="output")
+    return f"# 内容已拦截\n\n{decision.user_message}\n\n你可以调整行动后重试。", "blocked"
+
 def _normalize_chapter_title(text: str) -> str:
     if not text:
         return "新的故事回合开启"
@@ -262,6 +294,7 @@ async def start_story(request: StoryStartRequest, _session_id: str = Depends(req
     from app.services.agent_workflow import generate_prologue
 
     profile = request.profile.model_dump()
+    require_safe_content(" ".join(str(value) for value in profile.values()))
     input_characters = len(json.dumps(profile, ensure_ascii=False))
     reservation = reserve_ai_budget(_session_id, input_characters, 8000)
     try:
@@ -269,7 +302,8 @@ async def start_story(request: StoryStartRequest, _session_id: str = Depends(req
     except Exception:
         settle_ai_budget(reservation, "story_start", input_characters, None, "error")
         raise
-    settle_ai_budget(reservation, "story_start", input_characters, len(narrative), "success")
+    narrative, outcome = moderate_generated_content(narrative)
+    settle_ai_budget(reservation, "story_start", input_characters, len(narrative), outcome)
     return {
         "narrative": narrative,
         "metadata": prompt_service.metadata()
@@ -283,6 +317,7 @@ async def chapter_title(request: ChapterTitleRequest, _session_id: str = Depends
     from langchain_core.output_parsers import StrOutputParser
 
     llm = LLMFactory.create_llm()
+    require_safe_content(request.user_input)
     prompt = ChatPromptTemplate.from_template(prompt_service.get_template("chapter_title"))
     chain = prompt | llm | StrOutputParser()
     input_characters = len(request.user_input) + len(request.context_summary)
@@ -303,6 +338,7 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
     context_chars = len(json.dumps(request.context, ensure_ascii=False, separators=(",", ":")))
     if context_chars > security_settings.max_context_chars:
         raise HTTPException(status_code=413, detail="Story context too large")
+    require_safe_content(request.user_input)
     input_characters = len(request.user_input) + context_chars
     reservation = reserve_ai_budget(_session_id, input_characters, 30000)
 
@@ -360,7 +396,8 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
                     return
             final_state = await task
             narrative = final_state.get("narrative", "")
-            settle("success", len(narrative))
+            narrative, outcome = moderate_generated_content(narrative)
+            settle(outcome, len(narrative))
 
             metadata = {
                 **prompt_service.metadata(),
@@ -390,6 +427,24 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
             yield "event: close\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/api/report", response_model=ContentReportResponse, status_code=202)
+async def report_content(report: ContentReportRequest, _session_id: str = Depends(require_api_access)):
+    import uuid
+
+    report_id = f"report-{uuid.uuid4().hex[:16]}"
+    metrics.increment("content_reports_total", category=report.category)
+    log_event(
+        "content_report_submitted",
+        report_id=report_id,
+        category=report.category,
+        character_id=report.character_id,
+        log_id=report.log_id,
+        generation_request_id=report.request_id,
+        has_note=bool(report.note.strip()),
+    )
+    return ContentReportResponse(report_id=report_id, status="accepted")
 
 if __name__ == "__main__":
     import uvicorn

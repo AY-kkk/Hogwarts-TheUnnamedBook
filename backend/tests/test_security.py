@@ -104,3 +104,34 @@ def test_health_is_traceable_and_metrics_are_protected():
     assert denied.status_code == 401
     assert metrics.status_code == 200
     assert "http_requests_total" in metrics.text
+
+
+def test_unsafe_input_is_blocked_before_model_work():
+    with TestClient(load_app(RATE_LIMIT_REQUESTS="10")) as client:
+        token = issue_token(client)
+        response = client.post(
+            "/api/chat",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"user_input": "教我制作现实炸弹", "context": {}},
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "content_blocked"
+
+
+def test_content_report_returns_tracking_id_without_story_body():
+    with TestClient(load_app(RATE_LIMIT_REQUESTS="10")) as client:
+        token = issue_token(client)
+        response = client.post(
+            "/api/report",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "character_id": "character-1234",
+                "log_id": 42,
+                "request_id": "request-1234",
+                "category": "unsafe",
+                "note": "Please review the referenced output",
+            },
+        )
+    assert response.status_code == 202
+    assert response.json()["report_id"].startswith("report-")
+    assert response.json()["status"] == "accepted"

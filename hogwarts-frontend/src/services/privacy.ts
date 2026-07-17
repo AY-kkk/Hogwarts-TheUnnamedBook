@@ -74,6 +74,7 @@ export async function downloadLocalData(): Promise<void> {
   const payload = {
     exportedAt: new Date().toISOString(),
     privacyPolicyVersion: PRIVACY_POLICY_VERSION,
+    generatedContentNotice: '故事日志中 type=ai 的条目为 AI 生成内容，可能包含错误或不当信息。',
     data: {
       characters,
       logs,

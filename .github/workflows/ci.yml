@@ -21,6 +21,7 @@ jobs:
       VITE_OPERATOR_NAME: CI Operator
       VITE_PRIVACY_CONTACT: privacy@example.com
       VITE_MODEL_DATA_DESTINATIONS: CI Model Region
+      VITE_MINIMUM_AGE: "16"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

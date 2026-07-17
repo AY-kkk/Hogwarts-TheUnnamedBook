@@ -31,6 +31,8 @@ Clearing browser storage removes Local-First saves unless the user exported a co
 
 Users should not enter real-world sensitive personal information into character profiles or stories.
 
+The product applies a configurable age/guardian acknowledgement before AI use, labels generated stories, and offers a report action. A report submits reference identifiers, category and the reporter's optional note; it does not automatically attach the complete story body.
+
 ## Release gate
 
 Public release is blocked until the operator name, contact channel, model destinations, processing regions, retention periods and any applicable cross-border or minor-data obligations receive written legal approval.

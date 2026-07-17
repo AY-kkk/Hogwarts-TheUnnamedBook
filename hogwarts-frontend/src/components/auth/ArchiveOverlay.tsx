@@ -62,9 +62,10 @@ export function ArchiveOverlay({
                 logs.slice().reverse().map(log => (
                   <div key={log.id} className="bg-hogwarts-bg/50 p-4 rounded border border-white/5 hover:border-magic-gold/30 transition-colors group relative">
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-xs text-magic-gold/70 font-ui">
-                        {new Date(log.timestamp).toLocaleString()}
-                      </span>
+                      <div className="flex items-center gap-2 text-xs text-magic-gold/70 font-ui">
+                        <span>{new Date(log.timestamp).toLocaleString()}</span>
+                        {log.type === 'ai' && <span className="rounded border border-magic-gold/30 px-1.5 py-0.5">AI 生成</span>}
+                      </div>
                       <span className="text-xs text-parchment-300/30">
                         {new Blob([log.content]).size} bytes
                       </span>

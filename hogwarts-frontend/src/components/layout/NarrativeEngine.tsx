@@ -1,15 +1,19 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { type Log } from '../../lib/db';
 import { cn } from '../../lib/utils';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Bot, Flag } from 'lucide-react';
+import { ContentReportDialog } from '../compliance/ContentReportDialog';
 
 interface NarrativeEngineProps {
   logs: Log[];
   loading: boolean;
+  characterUuid: string;
 }
 
-export function NarrativeEngine({ logs, loading }: NarrativeEngineProps) {
+export function NarrativeEngine({ logs, loading, characterUuid }: NarrativeEngineProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [reportLog, setReportLog] = useState<Log | null>(null);
   
   // Use the last AI log ID as the trigger for page turn
   // When a new AI log is added or completes, we don't necessarily want to flip the whole page
@@ -55,6 +59,22 @@ export function NarrativeEngine({ logs, loading }: NarrativeEngineProps) {
               log.type === 'user' ? "pl-8 border-l-2 border-magic/30 italic text-ink/80" : "text-ink text-ink-bleed"
             )}
           >
+            {log.type === 'ai' && (
+              <div className="mb-3 flex items-center justify-between text-xs font-sans text-ink/50">
+                <span className="flex items-center gap-1 rounded-full border border-ink/15 px-2 py-1">
+                  <Bot size={13} /> AI 生成内容
+                </span>
+                {log.id && (
+                  <button
+                    type="button"
+                    onClick={() => setReportLog(log)}
+                    className="flex items-center gap-1 rounded px-2 py-1 hover:bg-ink/5 hover:text-ink"
+                  >
+                    <Flag size={13} /> 举报
+                  </button>
+                )}
+              </div>
+            )}
             {log.type === 'ai' || log.type === 'system' ? (
               <RenderMarkdown content={log.content} />
             ) : (
@@ -77,6 +97,11 @@ export function NarrativeEngine({ logs, loading }: NarrativeEngineProps) {
       )}
       
       <div ref={bottomRef} />
+      <ContentReportDialog
+        characterUuid={characterUuid}
+        log={reportLog}
+        onClose={() => setReportLog(null)}
+      />
     </div>
   );
 }

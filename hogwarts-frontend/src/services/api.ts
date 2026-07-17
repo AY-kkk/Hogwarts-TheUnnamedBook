@@ -3,8 +3,9 @@ import { db } from '../lib/db';
 import { getActiveTimelineLogs } from './pensieveResume';
 import { apiUrl } from '../config/api';
 import { requirePrivacyConsent } from './privacy';
-import { apiFetch, getSessionToken } from './session';
+import { apiFetch, getApiErrorMessage, getSessionToken } from './session';
 import type { GenerationMetadata } from '../lib/db';
+import { requireAgeAcknowledgement } from './safety';
 
 const API_URL = apiUrl('/api/chat');
 
@@ -14,6 +15,7 @@ export async function generateChapterTitle(
   characterUuid: string,
   signal?: AbortSignal
 ) {
+  await requireAgeAcknowledgement();
   await requirePrivacyConsent();
   const resp = await apiFetch('/api/chapter/title', {
     method: 'POST',
@@ -25,7 +27,7 @@ export async function generateChapterTitle(
     body: JSON.stringify({ user_input: userInput, context_summary: contextSummary })
   });
   if (!resp.ok) {
-    throw new Error(`Title Error: ${resp.statusText}`);
+    throw new Error(await getApiErrorMessage(resp, `章节标题生成失败（${resp.status}）`));
   }
   const data = (await resp.json()) as { title?: string };
   return data.title || '';
@@ -43,6 +45,7 @@ export async function sendChatRequest(
   }
 ) {
   try {
+    await requireAgeAcknowledgement();
     await requirePrivacyConsent();
     const sessionToken = await getSessionToken();
 
@@ -80,8 +83,7 @@ export async function sendChatRequest(
         if (response.ok) {
           return; // everything's good
         } else if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-          // client-side errors are usually non-retriable:
-          throw new Error(`Client Error: ${response.statusText}`);
+          throw new Error(await getApiErrorMessage(response, `请求被拒绝（${response.status}）`));
         } else {
           throw new Error(`Server Error: ${response.statusText}`);
         }

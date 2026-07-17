@@ -25,6 +25,7 @@ export function QuillInput({ input, setInput, onSend, loading }: QuillInputProps
            <textarea
              value={input}
              onChange={(e) => setInput(e.target.value)}
+             maxLength={2000}
              onKeyDown={(e) => {
                if (e.key === 'Enter' && !e.shiftKey) {
                  e.preventDefault();

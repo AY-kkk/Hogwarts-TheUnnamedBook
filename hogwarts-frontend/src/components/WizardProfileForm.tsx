@@ -9,8 +9,9 @@ import {
   assertCharacterSlotAvailable,
   createCharacterWithOpeningLog,
 } from '../services/characters';
-import { apiFetch } from '../services/session';
+import { apiFetch, getApiErrorMessage } from '../services/session';
 import { parseAndApplyState } from '../services/tagParser';
+import { requireAgeAcknowledgement } from '../services/safety';
 
 interface WizardProfileFormProps {
   onComplete: () => void;
@@ -70,6 +71,7 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
     setLoadingText("正在登记学籍...");
 
     try {
+      await requireAgeAcknowledgement();
       await requirePrivacyConsent();
       await assertCharacterSlotAvailable();
       const characterUuid = createCharacterUuid();
@@ -85,8 +87,7 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
       });
 
       if (!storyRes.ok) {
-        const errorBody = await storyRes.text();
-        throw new Error(`无法开启故事（${storyRes.status}）${errorBody ? `：${errorBody}` : ''}`);
+        throw new Error(await getApiErrorMessage(storyRes, `无法开启故事（${storyRes.status}）`));
       }
       const { narrative, metadata } = await storyRes.json() as {
         narrative?: string;

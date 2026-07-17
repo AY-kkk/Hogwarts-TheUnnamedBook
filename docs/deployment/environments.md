@@ -10,6 +10,7 @@ Create protected GitHub environments named `staging` and `production`. Productio
 | `VITE_OPERATOR_NAME` | Reviewed staging label | Legal operator name |
 | `VITE_PRIVACY_CONTACT` | Test contact | Published privacy contact |
 | `VITE_MODEL_DATA_DESTINATIONS` | Staging provider/region | Production provider/region |
+| `VITE_MINIMUM_AGE` | Reviewed test threshold | Legally reviewed threshold (13-18) |
 | `BACKEND_HEALTH_URL` | Staging API origin | Production API origin |
 | `IP_AUTHORIZATION_REFERENCE` | Internal evidence reference | Approved release evidence reference |
 | `LEGAL_REVIEW_REFERENCE` | Staging review ticket | Final legal sign-off reference |
