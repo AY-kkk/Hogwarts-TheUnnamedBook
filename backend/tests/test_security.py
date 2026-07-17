@@ -15,6 +15,8 @@ def load_app(**environment):
         "SESSION_ISSUE_LIMIT": "10",
         "MAX_REQUEST_BYTES": "2048",
         "MAX_CONTEXT_CHARS": "100",
+        "METRICS_TOKEN": "test-metrics-token-with-at-least-32-characters",
+        "SESSION_BUDGET_USD": "0.50",
     }
     os.environ.update(defaults | environment)
     sys.modules.pop("app.main", None)
@@ -84,3 +86,21 @@ def test_chat_context_size_is_limited_before_generation():
             json={"user_input": "continue", "context": {"summary": "x" * 120}},
         )
     assert response.status_code == 413
+
+
+def test_health_is_traceable_and_metrics_are_protected():
+    with TestClient(load_app()) as client:
+        health = client.get("/health", headers={"X-Request-ID": "launch-check-123"})
+        denied = client.get("/metrics")
+        metrics = client.get(
+            "/metrics",
+            headers={
+                "Authorization": "Bearer test-metrics-token-with-at-least-32-characters"
+            },
+        )
+    assert health.status_code == 200
+    assert health.headers["x-request-id"] == "launch-check-123"
+    assert health.json()["version"] == "dev"
+    assert denied.status_code == 401
+    assert metrics.status_code == 200
+    assert "http_requests_total" in metrics.text

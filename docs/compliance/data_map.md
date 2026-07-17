@@ -14,7 +14,7 @@
 | World line | Events changed by the player | Game engine | Browser IndexedDB | Preserve consequences | Until local deletion | Export, delete |
 | Consent record | Policy version, timestamp, operator and model destination shown | User | Browser IndexedDB settings | Prove local consent state | Until withdrawal or local deletion | Withdraw, delete |
 | Model request | User input, recent logs, summary, status snapshot, world line | Browser | Configured model service through FastAPI | Generate title, narration and decisions | Provider- and operator-specific; must be configured before launch | Described in notice; deletion subject to provider terms |
-| Service metadata | Request ID, duration, status, model, token counts, error category | Backend | Production logs / metrics | Reliability, abuse prevention and cost control | TBD before production | Contact operator |
+| Service metadata | Request ID, pseudonymous character UUID, duration, status, model, estimated token/cost counts, error category | Backend | Production logs / metrics | Reliability, abuse prevention and cost control | TBD before production | Contact operator |
 
 ## Explicitly prohibited input
 

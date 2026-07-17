@@ -7,11 +7,19 @@ import { apiFetch, getSessionToken } from './session';
 
 const API_URL = apiUrl('/api/chat');
 
-export async function generateChapterTitle(userInput: string, contextSummary: string, signal?: AbortSignal) {
+export async function generateChapterTitle(
+  userInput: string,
+  contextSummary: string,
+  characterUuid: string,
+  signal?: AbortSignal
+) {
   await requirePrivacyConsent();
   const resp = await apiFetch('/api/chapter/title', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Character-ID': characterUuid,
+    },
     signal,
     body: JSON.stringify({ user_input: userInput, context_summary: contextSummary })
   });
@@ -57,6 +65,7 @@ export async function sendChatRequest(
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${sessionToken}`,
+        'X-Character-ID': characterUuid,
       },
       signal: options?.signal,
       body: JSON.stringify({

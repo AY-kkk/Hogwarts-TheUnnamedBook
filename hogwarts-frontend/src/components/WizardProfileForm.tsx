@@ -74,7 +74,10 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
       setLoadingText("正在编织命运...");
       const storyRes = await apiFetch('/api/story/start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Character-ID': characterUuid,
+        },
         body: JSON.stringify({ profile: formData })
       });
 

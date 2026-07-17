@@ -5,6 +5,7 @@ from typing import Dict, Any
 import time
 import asyncio
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import PlainTextResponse
 import re
 import os
 import json
@@ -14,6 +15,16 @@ from app.security import (
     SecuritySettings,
     SessionTokenError,
     SessionTokenManager,
+)
+from app.observability import (
+    CostSettings,
+    MetricsRegistry,
+    SessionBudgetExceeded,
+    SessionBudgetTracker,
+    estimate_token_cost,
+    log_event,
+    new_request_id,
+    request_id_context,
 )
 
 security_settings = SecuritySettings.from_env()
@@ -29,6 +40,16 @@ session_rate_limiter = FixedWindowRateLimiter(
     security_settings.session_issue_limit,
     security_settings.rate_limit_window_seconds,
 )
+cost_settings = CostSettings.from_env()
+budget_tracker = SessionBudgetTracker(cost_settings.session_budget_usd)
+metrics = MetricsRegistry()
+app_started_at = time.time()
+app_version = os.getenv("APP_VERSION", "dev")
+model_provider = os.getenv("LLM_PROVIDER", "openai")
+model_name = os.getenv("LLM_MODEL_NAME", "gpt-4o")
+metrics_token = os.getenv("METRICS_TOKEN", "development-metrics-token").strip()
+if security_settings.app_env == "production" and len(metrics_token) < 32:
+    raise RuntimeError("METRICS_TOKEN must contain at least 32 characters in production")
 
 app = FastAPI(title="Hogwarts Simulator API")
 
@@ -38,7 +59,7 @@ app.add_middleware(
     allow_origins=list(security_settings.cors_allowed_origins),
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Character-ID"],
 )
 
 class ChatRequest(BaseModel):
@@ -85,6 +106,43 @@ async def reject_oversized_requests(request: Request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def observe_http_requests(request: Request, call_next):
+    request_id = new_request_id(request.headers.get("x-request-id"))
+    context_token = request_id_context.set(request_id)
+    started_at = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        duration_seconds = time.perf_counter() - started_at
+        metrics.increment(
+            "http_requests_total",
+            method=request.method,
+            path=request.url.path,
+            status=str(status_code),
+        )
+        metrics.observe(
+            "http_request_duration_seconds",
+            duration_seconds,
+            method=request.method,
+            path=request.url.path,
+        )
+        character_id = request.headers.get("x-character-id")
+        log_event(
+            "http_request",
+            method=request.method,
+            path=request.url.path,
+            status=status_code,
+            duration_ms=round(duration_seconds * 1000, 2),
+            character_id=character_id if character_id and len(character_id) <= 64 else None,
+        )
+        request_id_context.reset(context_token)
+
+
 async def require_api_access(request: Request) -> str:
     authorization = request.headers.get("authorization", "")
     scheme, _, token = authorization.partition(" ")
@@ -104,6 +162,54 @@ async def require_api_access(request: Request) -> str:
         )
     return session_id
 
+
+def reserve_ai_budget(session_id: str, input_characters: int, expected_output_characters: int):
+    estimated_cost = estimate_token_cost(
+        input_characters,
+        expected_output_characters,
+        cost_settings,
+    )
+    try:
+        return budget_tracker.reserve(session_id, estimated_cost)
+    except SessionBudgetExceeded as exc:
+        metrics.increment("ai_budget_rejections_total", model=model_name)
+        raise HTTPException(status_code=429, detail="Anonymous session AI budget exhausted") from exc
+
+
+def settle_ai_budget(
+    reservation,
+    endpoint: str,
+    input_characters: int,
+    output_characters: int | None,
+    outcome: str,
+) -> None:
+    actual_cost = None
+    if output_characters is not None:
+        actual_cost = estimate_token_cost(input_characters, output_characters, cost_settings)
+    session_total = budget_tracker.settle(reservation, actual_cost)
+    charged_cost = reservation.amount_usd if actual_cost is None else actual_cost
+    metrics.increment(
+        "ai_requests_total",
+        endpoint=endpoint,
+        model=model_name,
+        outcome=outcome,
+    )
+    metrics.increment(
+        "ai_estimated_cost_usd_total",
+        charged_cost,
+        endpoint=endpoint,
+        model=model_name,
+    )
+    log_event(
+        "ai_request",
+        endpoint=endpoint,
+        provider=model_provider,
+        model=model_name,
+        outcome=outcome,
+        estimated_cost_usd=round(charged_cost, 6),
+        session_estimated_cost_usd=round(session_total, 6),
+    )
+
 def _normalize_chapter_title(text: str) -> str:
     if not text:
         return "新的故事回合开启"
@@ -117,7 +223,22 @@ def _normalize_chapter_title(text: str) -> str:
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "timestamp": time.time()}
+    return {
+        "status": "ok",
+        "timestamp": time.time(),
+        "version": app_version,
+        "uptime_seconds": round(time.time() - app_started_at, 1),
+        "model_provider": model_provider,
+        "model": model_name,
+    }
+
+
+@app.get("/metrics", response_class=PlainTextResponse)
+async def prometheus_metrics(request: Request):
+    authorization = request.headers.get("authorization", "")
+    if authorization != f"Bearer {metrics_token}":
+        raise HTTPException(status_code=401, detail="Invalid metrics token")
+    return metrics.render_prometheus()
 
 @app.post("/api/session", response_model=SessionResponse)
 async def create_session(request: Request):
@@ -137,7 +258,14 @@ async def start_story(request: StoryStartRequest, _session_id: str = Depends(req
     from app.services.agent_workflow import generate_prologue
 
     profile = request.profile.model_dump()
-    narrative = await generate_prologue(profile, request.profile.self_description)
+    input_characters = len(json.dumps(profile, ensure_ascii=False))
+    reservation = reserve_ai_budget(_session_id, input_characters, 8000)
+    try:
+        narrative = await generate_prologue(profile, request.profile.self_description)
+    except Exception:
+        settle_ai_budget(reservation, "story_start", input_characters, None, "error")
+        raise
+    settle_ai_budget(reservation, "story_start", input_characters, len(narrative), "success")
     return {"narrative": narrative}
 
 @app.post("/api/chapter/title", response_model=ChapterTitleResponse)
@@ -160,10 +288,17 @@ async def chapter_title(request: ChapterTitleRequest, _session_id: str = Depends
         ("user", "用户本轮输入：{user_input}\n上下文摘要：{context_summary}\n请输出标题名：")
     ])
     chain = prompt | llm | StrOutputParser()
-    raw = await chain.ainvoke({
-        "user_input": request.user_input,
-        "context_summary": request.context_summary
-    })
+    input_characters = len(request.user_input) + len(request.context_summary)
+    reservation = reserve_ai_budget(_session_id, input_characters, 200)
+    try:
+        raw = await chain.ainvoke({
+            "user_input": request.user_input,
+            "context_summary": request.context_summary
+        })
+    except Exception:
+        settle_ai_budget(reservation, "chapter_title", input_characters, None, "error")
+        raise
+    settle_ai_budget(reservation, "chapter_title", input_characters, len(raw), "success")
     return {"title": _normalize_chapter_title(raw)}
 
 @app.post("/api/chat")
@@ -171,8 +306,27 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
     context_chars = len(json.dumps(request.context, ensure_ascii=False, separators=(",", ":")))
     if context_chars > security_settings.max_context_chars:
         raise HTTPException(status_code=413, detail="Story context too large")
+    input_characters = len(request.user_input) + context_chars
+    reservation = reserve_ai_budget(_session_id, input_characters, 30000)
+
     # Streaming response from the Agent Workflow
     async def event_generator():
+        task = None
+        settled = False
+
+        def settle(outcome: str, output_characters: int | None = None):
+            nonlocal settled
+            if settled:
+                return
+            settle_ai_budget(
+                reservation,
+                "chat",
+                input_characters,
+                output_characters,
+                outcome,
+            )
+            settled = True
+
         try:
             from app.services.agent_workflow import agent_workflow
             
@@ -198,11 +352,17 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
                 yield f"event: status\ndata: exploring:{elapsed}\n\n"
                 if elapsed >= timeout_seconds:
                     task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                    settle("timeout")
                     yield "event: error\ndata: timeout\n\n"
                     yield "event: close\n\n"
                     return
             final_state = await task
             narrative = final_state.get("narrative", "")
+            settle("success", len(narrative))
             
             # Simulate streaming the result
             chunk_size = 20
@@ -213,7 +373,13 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
                 
             yield "event: close\n\n"
             
+        except asyncio.CancelledError:
+            if task and not task.done():
+                task.cancel()
+            settle("cancelled")
+            raise
         except Exception:
+            settle("error")
             yield "event: error\ndata: generation_failed\n\n"
             yield "event: close\n\n"
 

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import Literal, Dict, Any
 
 from app.services.llm_factory import LLMFactory
+from app.observability import log_event
 
 # --- Intent Schema ---
 class IntentSchema(BaseModel):
@@ -40,19 +41,16 @@ class IntentAnalyzer:
 
     async def analyze(self, user_input: str, context: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            print(f"Analyzing intent for input: {user_input}")
             result = await self.chain.ainvoke({
                 "user_input": user_input, 
                 "context_summary": context.get("summary", "")
             })
-            print(f"Intent analysis result: {result}")
-            
             if not isinstance(result, dict) or "type" not in result:
-                print("Invalid result format, using fallback.")
+                log_event("intent_analysis_fallback", reason="invalid_result")
                 return {"type": "action", "reason": "Fallback due to invalid format", "target": ""}
-                
+
+            log_event("intent_analysis_completed", intent=result["type"])
             return result
-        except Exception as e:
-            print(f"Intent analysis error: {e}")
-            # Fallback
-            return {"type": "action", "reason": f"Fallback due to parsing error: {str(e)}", "target": ""}
+        except Exception:
+            log_event("intent_analysis_fallback", reason="provider_or_parse_error")
+            return {"type": "action", "reason": "Fallback due to analysis error", "target": ""}

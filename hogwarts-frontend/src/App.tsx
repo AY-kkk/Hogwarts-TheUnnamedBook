@@ -144,7 +144,7 @@ function App() {
     let titleName = '';
     try {
       const summary = activeCharacter.summary || '';
-      titleName = await generateChapterTitle(userInput, summary, titleAbort.signal);
+      titleName = await generateChapterTitle(userInput, summary, charUuid, titleAbort.signal);
     } catch {
       const onlyCjk = (userInput.match(/[\u4e00-\u9fff]/g) || []).join('');
       titleName = onlyCjk.slice(0, 20) || '新的故事回合开启';
