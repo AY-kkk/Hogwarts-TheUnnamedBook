@@ -10,6 +10,7 @@ from app.services.prompt_service import PromptConfigurationError, PromptService,
 def test_production_manifest_loads_versioned_prompts_and_rules():
     assert prompt_service.prompt_version.startswith("prompt-")
     assert prompt_service.rules_version.startswith("rules-")
+    assert prompt_service.state_schema_version.startswith("state-")
     assert "{user_input}" in prompt_service.get_template("intent")
     assert "#9. 状态更新协议" in prompt_service.get_rule("core")
 
@@ -43,6 +44,7 @@ def test_missing_required_prompt_file_fails_startup(tmp_path: Path):
     manifest = {
         "prompt_version": "p1",
         "rules_version": "r1",
+        "state_schema_version": "s1",
         "rules": {"core": "core.md"},
         "prompts": {"missing": {"file": "missing.md", "variables": []}},
     }
@@ -59,6 +61,7 @@ def test_template_variable_mismatch_fails_startup(tmp_path: Path):
     manifest = {
         "prompt_version": "p1",
         "rules_version": "r1",
+        "state_schema_version": "s1",
         "rules": {"core": "core.md"},
         "prompts": {"hello": {"file": "prompt.md", "variables": []}},
     }

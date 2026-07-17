@@ -30,6 +30,7 @@ class PromptService:
         self._manifest = self._load_manifest()
         self.prompt_version = self._required_string("prompt_version")
         self.rules_version = self._required_string("rules_version")
+        self.state_schema_version = self._required_string("state_schema_version")
         self._templates = self._load_templates()
         self._rules = self._load_rules()
 
@@ -110,6 +111,7 @@ class PromptService:
         return {
             "prompt_version": self.prompt_version,
             "rules_version": self.rules_version,
+            "state_schema_version": self.state_schema_version,
         }
 
 

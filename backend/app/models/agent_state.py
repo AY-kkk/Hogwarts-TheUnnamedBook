@@ -9,4 +9,5 @@ class GameState(TypedDict, total=False):
     narrative: str
     prompt_version: str
     rules_version: str
+    state_schema_version: str
     orchestration_trace: list[str]

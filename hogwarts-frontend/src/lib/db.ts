@@ -1,4 +1,13 @@
 import Dexie, { type Table } from 'dexie';
+import {
+  HOUSES,
+  normalizeLegacyStatus,
+  STATE_SCHEMA_VERSION,
+  type GameStatus,
+  type House,
+  type RelationshipState,
+  type SpellState,
+} from './stateSchema';
 
 // Define the interface for the Character table
 export interface Character {
@@ -16,24 +25,8 @@ export interface Character {
   patronus?: string; // Added
   self_description?: string; // Added
   
-  house: string;
-  status: {
-    hp: number;
-    mp: number;
-    gold: number;
-    level: number;
-    exp: number;
-    attributes: {
-      knowledge: number;
-      courage: number;
-      stamina: number;
-      charm?: number;
-      mental?: number;
-    };
-    inventory: string[];
-    location: string;
-    current_year?: number;
-  };
+  house: House;
+  status: GameStatus;
   wand?: {
     wood: string;
     core: string;
@@ -41,8 +34,8 @@ export interface Character {
     flexibility: string;
   };
   wand_description?: string; // Added to store the raw input
-  spells?: Record<string, { level: number; desc: string }>;
-  relationships?: Record<string, { level: number; tag: string; desc: string }>;
+  spells?: Record<string, SpellState>;
+  relationships?: Record<string, RelationshipState>;
   chapter_progress?: string;
   summary: string;
 }
@@ -73,6 +66,7 @@ export interface GenerationMetadata {
   rules_version: string;
   request_id?: string;
   orchestration_trace?: string[];
+  state_schema_version?: string;
 }
 
 // Define the interface for the WorldLog table
@@ -139,6 +133,24 @@ export class HogwartsDB extends Dexie {
         });
         await transaction.table<WorldLog>('world_log').toCollection().modify((worldLog) => {
           if (!worldLog.characterUuid) worldLog.characterUuid = soleCharacterUuid;
+        });
+      });
+    this.version(6)
+      .stores({
+        settings: 'key',
+        character: '++id, uuid, name, lastPlayed, synced',
+        logs: '++id, characterUuid, turn_id, type, timestamp',
+        memories: '++id, characterUuid, timestamp',
+        world_log: '++id, characterUuid, event_name, timestamp'
+      })
+      .upgrade(async (transaction) => {
+        await transaction.table<Character>('character').toCollection().modify((character) => {
+          character.status = normalizeLegacyStatus(character.status, character.era);
+          if (!HOUSES.includes(character.house as House)) character.house = 'Unsorted';
+        });
+        await transaction.table<Setting>('settings').put({
+          key: 'stateSchemaVersion',
+          value: STATE_SCHEMA_VERSION,
         });
       });
   }

@@ -23,7 +23,7 @@ import { clearPensieveResumeState, startPensieveResumeFromLog } from '../../serv
 export function MemoryBar({ isExpanded, onToggle, character }: MemoryBarProps) {
   const status = character.status;
   const house = character.house; // Can be undefined
-  const currentYear = status?.current_year || 1991;
+  const currentYear = status.current_year;
   const currentSeason = "Autumn"; 
   const houseTheme = house ? (HOUSE_CONFIG[house] || DEFAULT_THEME) : DEFAULT_THEME;
 

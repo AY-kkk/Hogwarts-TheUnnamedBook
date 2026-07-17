@@ -80,7 +80,7 @@ export const CharacterCard: React.FC<CharacterCardProps> = ({
             {character.name}
           </h3>
           <p className="font-ui text-xs opacity-60 uppercase tracking-widest">
-            {character.house || 'Unsorted'} • Year {character.status.current_year || 1}
+            {character.house} • Year {character.status.current_year}
           </p>
         </div>
         

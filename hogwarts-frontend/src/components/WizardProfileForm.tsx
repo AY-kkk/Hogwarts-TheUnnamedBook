@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { createCharacterUuid } from '../lib/db';
+import { createCharacterUuid, db } from '../lib/db';
 import type { GenerationMetadata } from '../lib/db';
+import { createInitialGameStatus } from '../lib/stateSchema';
 import { cn } from '../lib/utils';
 import { Sparkles, Scroll, Feather } from 'lucide-react';
 import { requirePrivacyConsent } from '../services/privacy';
@@ -9,6 +10,7 @@ import {
   createCharacterWithOpeningLog,
 } from '../services/characters';
 import { apiFetch } from '../services/session';
+import { parseAndApplyState } from '../services/tagParser';
 
 interface WizardProfileFormProps {
   onComplete: () => void;
@@ -95,7 +97,7 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
         throw new Error("‘自我’描述未触发分支，请检查档案完整性");
       }
 
-      await createCharacterWithOpeningLog(
+      const { logId } = await createCharacterWithOpeningLog(
         {
           uuid: characterUuid,
           name: formData.name,
@@ -108,14 +110,8 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
           wand_description: formData.wand,
           
           // Default stats
-          house: "Unsorted", // Will be sorted in-game
-          status: {
-            hp: 100, mp: 50, gold: 10, level: 1, exp: 0,
-            attributes: { knowledge: 10, courage: 10, stamina: 10, charm: 10, mental: 10 },
-            inventory: ["School Robes"], 
-            location: "Prologue",
-            current_year: 1
-          },
+          house: "Unsorted",
+          status: createInitialGameStatus(formData.era),
           summary: "A student's journey begins...",
           // Map wand text to object structure roughly or keep default
           wand: {
@@ -128,6 +124,10 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
         narrative,
         metadata
       );
+      const cleanedNarrative = await parseAndApplyState(narrative, characterUuid);
+      if (cleanedNarrative !== narrative) {
+        await db.logs.update(logId, { content: cleanedNarrative });
+      }
 
       onComplete();
 

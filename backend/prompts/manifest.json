@@ -1,6 +1,7 @@
 {
-  "prompt_version": "prompt-2026.07.17.1",
-  "rules_version": "rules-2026.07.17.1",
+  "prompt_version": "prompt-2026.07.17.2",
+  "rules_version": "rules-2026.07.17.2",
+  "state_schema_version": "state-2026.07.17.1",
   "rules": {
     "core": "system_core_rules.md",
     "prologue": "system_prologue_rules.md"

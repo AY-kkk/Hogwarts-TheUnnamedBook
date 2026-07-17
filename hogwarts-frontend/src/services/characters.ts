@@ -1,4 +1,5 @@
 import { db, type Character, type GenerationMetadata } from '../lib/db';
+import { STATE_SCHEMA_VERSION } from '../lib/stateSchema';
 
 export const MAX_CHARACTER_SLOTS = 3;
 
@@ -19,27 +20,29 @@ export async function createCharacterWithOpeningLog(
   character: Character,
   openingNarrative: string,
   generation?: GenerationMetadata
-): Promise<number> {
+): Promise<{ characterId: number; logId: number }> {
   if (!character.uuid) throw new Error('新角色缺少本地 UUID');
 
-  return db.transaction('rw', db.character, db.logs, async () => {
+  return db.transaction('rw', [db.character, db.logs, db.settings], async () => {
     if ((await db.character.count()) >= MAX_CHARACTER_SLOTS) {
       throw new CharacterSlotLimitError();
     }
 
+    const now = Date.now();
     const characterId = await db.character.add({
       ...character,
-      lastPlayed: Date.now(),
+      lastPlayed: now,
     });
-    await db.logs.add({
+    const logId = await db.logs.add({
       characterUuid: character.uuid,
-      turn_id: Date.now(),
+      turn_id: now,
       content: openingNarrative,
       type: 'ai',
-      timestamp: Date.now(),
+      timestamp: now,
       generation,
     });
-    return characterId;
+    await db.settings.put({ key: 'stateSchemaVersion', value: STATE_SCHEMA_VERSION });
+    return { characterId, logId };
   });
 }
 
@@ -59,7 +62,13 @@ export async function deleteCharacterData(characterId: number): Promise<void> {
         db.logs.where('characterUuid').equals(characterUuid).delete(),
         db.memories.where('characterUuid').equals(characterUuid).delete(),
         db.world_log.where('characterUuid').equals(characterUuid).delete(),
-        db.settings.delete(`pensieveResume:${characterUuid}`),
+        db.settings
+          .filter((setting) =>
+            setting.key === `pensieveResume:${characterUuid}`
+            || setting.key.startsWith(`stateEvent:${characterUuid}:`)
+            || setting.key.startsWith(`stateError:${characterUuid}:`)
+          )
+          .delete(),
       ]);
       await db.character.delete(characterId);
     }

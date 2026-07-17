@@ -16,9 +16,9 @@ export function CharacterPanel({ character }: CharacterPanelProps) {
         <h3 className="font-title text-xl mb-4 border-b border-ink/10 pb-2">Attributes</h3>
         <div className="grid grid-cols-2 gap-4">
             <AttributeItem icon={<Brain size={18}/>} label="Knowledge" value={status.attributes.knowledge} />
-            <AttributeItem icon={<Zap size={18}/>} label="Courage" value={status.attributes.courage} />
-            <AttributeItem icon={<Heart size={18}/>} label="Stamina" value={status.attributes.stamina} />
-            <AttributeItem icon={<Sparkles size={18}/>} label="Charm" value={status.attributes.charm || 10} />
+            <AttributeItem icon={<Zap size={18}/>} label="Morality" value={status.attributes.morality} />
+            <AttributeItem icon={<Heart size={18}/>} label="Athletics" value={status.attributes.athletics} />
+            <AttributeItem icon={<Sparkles size={18}/>} label="Charm" value={status.attributes.charm} />
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import Dexie from 'dexie';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { db, type Character } from '../lib/db';
+import { createInitialGameStatus } from '../lib/stateSchema';
 import {
   assertCharacterSlotAvailable,
   CharacterSlotLimitError,
@@ -13,16 +14,7 @@ function buildCharacter(name: string, uuid: string): Character {
     uuid,
     name,
     house: 'Unsorted',
-    status: {
-      hp: 100,
-      mp: 50,
-      gold: 10,
-      level: 1,
-      exp: 0,
-      attributes: { knowledge: 10, courage: 10, stamina: 10 },
-      inventory: [],
-      location: 'Prologue',
-    },
+    status: createInitialGameStatus('救世主时代'),
     summary: `${name} summary`,
   };
 }
@@ -64,6 +56,8 @@ describe('character data isolation', () => {
     await db.settings.bulkPut([
       { key: 'pensieveResume:uuid-target', value: { baseLogId: 1 } },
       { key: 'pensieveResume:uuid-survivor', value: { baseLogId: 2 } },
+      { key: 'stateEvent:uuid-target:event-1', value: { appliedAt: 1 } },
+      { key: 'stateEvent:uuid-survivor:event-2', value: { appliedAt: 2 } },
     ]);
 
     await deleteCharacterData(targetId);
@@ -74,10 +68,12 @@ describe('character data isolation', () => {
     expect(await db.memories.where('characterUuid').equals('uuid-target').count()).toBe(0);
     expect(await db.world_log.where('characterUuid').equals('uuid-target').count()).toBe(0);
     expect(await db.settings.get('pensieveResume:uuid-target')).toBeUndefined();
+    expect(await db.settings.get('stateEvent:uuid-target:event-1')).toBeUndefined();
     expect(await db.logs.where('characterUuid').equals('uuid-survivor').count()).toBe(1);
     expect(await db.memories.where('characterUuid').equals('uuid-survivor').count()).toBe(1);
     expect(await db.world_log.where('characterUuid').equals('uuid-survivor').count()).toBe(1);
     expect(await db.settings.get('pensieveResume:uuid-survivor')).toBeDefined();
+    expect(await db.settings.get('stateEvent:uuid-survivor:event-2')).toBeDefined();
   });
 
   it('returns only the active character timeline', async () => {

@@ -233,6 +233,7 @@ async def health_check():
         "model": model_name,
         "prompt_version": prompt_service.prompt_version,
         "rules_version": prompt_service.rules_version,
+        "state_schema_version": prompt_service.state_schema_version,
     }
 
 

@@ -207,54 +207,44 @@ B. 练习（实战使用）： 根据综合施法公式检定。如果判定成�
 ```json
 <state_update>
 {
+  "event_id": "turn-10-a1b2c3d4",
   "status": {
     "hp": 90,
-    "mp": 45, 
-    "max_mp": 23, // 一般为年龄成长提升
+    "mp": 20,
+    "max_mp": 23,
     "gold": 10,
-    "ap": 5,           // 行动力变化
-    "max_ap": 5,       // 行动力上限变化, 如熬夜透支
-    "knowledge": 15,   // 知识
-    "athletics": 30,   // 体能
-    "charm": 50,       // 魅力
-    "morality": 50,    // 道德
-    "mental": 50,      // 精神力
+    "ap": 5,
+    "max_ap": 7,
+    "attributes": {
+      "knowledge": 15,
+      "athletics": 30,
+      "charm": 50,
+      "morality": 50,
+      "mental": 50
+    },
     "current_year": 1991,
     "current_month": 9,
-    "current_week": 1, // 1-4
-    "current_weekday": 1, // 1-7
+    "current_week": 1,
+    "current_weekday": 1,
     "location": "变形术教室",
-    "game_mode": "weekly" // weekly | event
+    "game_mode": "weekly",
+    "prologue_turn": 9,
+    "chapter": "九月第一周"
   },
-  
-  // [核心档案] (仅在分院时更新)
-  "house": "格兰芬多",  // 学院: 格兰芬多, 斯莱特林, 拉文克劳, 赫奇帕奇
-
-  // [物品栏] (add/remove)
-   "inventory_events": [
-      { 
-         "op": "add", 
-         "item": "《古代如尼文详解》", 
-         "desc": "赫敏三年级圣诞节时送你的礼物。" 
-      },
-      { 
-         "op": "remove", 
-         "item": "隐形衣" 
-         // 移除时不需要 desc
-      }
-   ],
-
-  // [咒语系统] (习得或熟练度提升) (Map: 名字 -> 详情)
+  "house": "Gryffindor",
+  "inventory_events": [
+    {
+      "op": "add",
+      "item": "《古代如尼文详解》",
+      "desc": "一本带有手写批注的旧书。"
+    }
+  ],
   "spells": {
     "除你武器": { "level": 1, "desc": "你刚刚掌握了要领" }
   },
-
-  // [社交关系] (结识新人或关系变动) (Map: 名字 -> 详情)
   "relationships": {
     "赫敏·格兰杰": { "level": 2, "tag": "朋友", "desc": "她觉得你刚才那个咒语用得很聪明" }
   },
-
-  // [世界线变动] 添加新的世界线变动日志 (字符串)
   "world_log_add": "纳威没有丢失莱福"
 }
 </state_update>
