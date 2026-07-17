@@ -47,7 +47,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
       <motion.div 
         className="absolute inset-[-5%] w-[110%] h-[110%] bg-cover bg-center bg-no-repeat z-0 opacity-80"
         style={{ 
-          backgroundImage: 'url("https://images.unsplash.com/photo-1547756536-cde3673fa2e5?q=80&w=2641&auto=format&fit=crop")', // Misty mountains/castle vibe
+          background: [
+            'radial-gradient(circle at 50% 28%, rgba(94, 116, 164, 0.55), transparent 28%)',
+            'linear-gradient(145deg, transparent 43%, rgba(5, 8, 18, 0.92) 44% 54%, transparent 55%)',
+            'linear-gradient(35deg, #060813 0%, #162038 45%, #090b18 100%)'
+          ].join(','),
           x: bgX, 
           y: bgY,
           filter: 'brightness(0.6) contrast(1.2) sepia(0.2) hue-rotate(200deg)'
@@ -132,8 +136,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
       <CustomCursor />
       
       {/* Noise Overlay */}
-      <div className="absolute inset-0 z-50 pointer-events-none opacity-[0.03] mix-blend-overlay"
-           style={{ backgroundImage: 'url("https://grainy-gradients.vercel.app/noise.svg")' }} />
+      <div className="absolute inset-0 z-50 pointer-events-none opacity-[0.03] mix-blend-overlay bg-noise" />
     </div>
   );
 };
