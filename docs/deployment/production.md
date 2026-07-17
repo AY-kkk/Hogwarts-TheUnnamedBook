@@ -44,11 +44,20 @@ Minimum runtime variables:
 | `APP_ENV` | `development`, `staging`, or `production` | No |
 | `PORT` | Container listen port | No |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated frontend origins | No |
+| `SESSION_SECRET` | Signs short-lived anonymous API sessions; minimum 32 random characters | Yes |
+| `SESSION_TTL_SECONDS` | Anonymous session lifetime | No |
+| `RATE_LIMIT_REQUESTS` | Requests allowed per session window | No |
+| `RATE_LIMIT_WINDOW_SECONDS` | Rate-limit window length | No |
+| `SESSION_ISSUE_LIMIT` | Session tokens issued per client/window | No |
+| `MAX_REQUEST_BYTES` | Maximum declared request body size | No |
+| `MAX_CONTEXT_CHARS` | Maximum serialized story context | No |
 | `LLM_PROVIDER` | Selected provider | No |
 | `LLM_MODEL_NAME` | Selected model | No |
 | Provider API key | Model authentication | Yes |
 
 Secrets must be injected by the hosting platform. Do not upload a populated `.env` file.
+
+The browser obtains a signed, short-lived anonymous session from `POST /api/session` and sends it as a Bearer token. The application process enforces a per-session baseline limit. Multi-instance production deployments must also configure a shared gateway/edge rate limit because in-process counters are not shared between containers.
 
 The container health endpoint is `GET /health`. Configure the platform health check to use this path.
 

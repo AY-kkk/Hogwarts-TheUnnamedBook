@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { createCharacterUuid } from '../lib/db';
 import { cn } from '../lib/utils';
 import { Sparkles, Scroll, Feather } from 'lucide-react';
-import { apiUrl } from '../config/api';
 import { requirePrivacyConsent } from '../services/privacy';
 import {
   assertCharacterSlotAvailable,
   createCharacterWithOpeningLog,
 } from '../services/characters';
+import { apiFetch } from '../services/session';
 
 interface WizardProfileFormProps {
   onComplete: () => void;
@@ -72,7 +72,7 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
       const characterUuid = createCharacterUuid();
 
       setLoadingText("正在编织命运...");
-      const storyRes = await fetch(apiUrl('/api/story/start'), {
+      const storyRes = await apiFetch('/api/story/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profile: formData })

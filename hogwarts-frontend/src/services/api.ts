@@ -3,13 +3,13 @@ import { db } from '../lib/db';
 import { getActiveTimelineLogs } from './pensieveResume';
 import { apiUrl } from '../config/api';
 import { requirePrivacyConsent } from './privacy';
+import { apiFetch, getSessionToken } from './session';
 
 const API_URL = apiUrl('/api/chat');
-const CHAPTER_TITLE_URL = apiUrl('/api/chapter/title');
 
 export async function generateChapterTitle(userInput: string, contextSummary: string, signal?: AbortSignal) {
   await requirePrivacyConsent();
-  const resp = await fetch(CHAPTER_TITLE_URL, {
+  const resp = await apiFetch('/api/chapter/title', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,
@@ -32,6 +32,7 @@ export async function sendChatRequest(
 ) {
   try {
     await requirePrivacyConsent();
+    const sessionToken = await getSessionToken();
 
     // 1. Assemble Context
     const character = await db.character.where('uuid').equals(characterUuid).first();
@@ -55,12 +56,12 @@ export async function sendChatRequest(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sessionToken}`,
       },
       signal: options?.signal,
       body: JSON.stringify({
         user_input: userInput,
-        context: context,
-        api_key: "demo-key"
+        context: context
       }),
       async onopen(response) {
         if (response.ok) {
