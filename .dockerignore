@@ -1,0 +1,16 @@
+.git
+.gitignore
+.DS_Store
+**/.env
+**/.env.*
+!**/.env.example
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/dist
+**/.pytest_cache
+design
+hogwarts-frontend
+实例图片
+*.png
+*.xmind

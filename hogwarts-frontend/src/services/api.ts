@@ -1,11 +1,10 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { db } from '../lib/db';
 import { getActiveTimelineLogs } from './pensieveResume';
+import { apiUrl } from '../config/api';
 
-// For local dev, we use the proxy if setup, or direct if CORS is open
-// Backend is on 3000
-const API_URL = 'http://localhost:3000/api/chat'; 
-const CHAPTER_TITLE_URL = 'http://localhost:3000/api/chapter/title';
+const API_URL = apiUrl('/api/chat');
+const CHAPTER_TITLE_URL = apiUrl('/api/chapter/title');
 
 export async function generateChapterTitle(userInput: string, contextSummary: string, signal?: AbortSignal) {
   const resp = await fetch(CHAPTER_TITLE_URL, {

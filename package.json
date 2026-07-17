@@ -2,9 +2,11 @@
   "name": "hogwarts-simulator-root",
   "private": true,
   "scripts": {
-    "install:frontend": "cd hogwarts-frontend && npm install",
+    "install:frontend": "npm ci --prefix hogwarts-frontend",
     "build": "cd hogwarts-frontend && npm run build",
-    "dev": "cd hogwarts-frontend && npm run dev"
+    "dev": "npm run dev:frontend",
+    "dev:frontend": "cd hogwarts-frontend && npm run dev",
+    "dev:backend": "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 3000"
   },
   "engines": {
     "node": ">=20.19.0"

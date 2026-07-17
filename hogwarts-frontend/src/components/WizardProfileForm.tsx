@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { db, addLog } from '../lib/db';
 import { cn } from '../lib/utils';
 import { Sparkles, Scroll, Feather } from 'lucide-react';
+import { apiUrl } from '../config/api';
 
 interface WizardProfileFormProps {
   onComplete: () => void;
@@ -62,7 +63,7 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
 
     try {
       // 1. Register Profile
-      const profileRes = await fetch('http://localhost:3000/api/wizard-profile', {
+      const profileRes = await fetch(apiUrl('/api/wizard-profile'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -73,7 +74,7 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
 
       // 2. Start Story
       setLoadingText("正在编织命运...");
-      const storyRes = await fetch('http://localhost:3000/api/story/start', {
+      const storyRes = await fetch(apiUrl('/api/story/start'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

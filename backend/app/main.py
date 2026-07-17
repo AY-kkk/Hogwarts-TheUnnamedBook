@@ -6,6 +6,7 @@ import time
 import asyncio
 from fastapi.responses import StreamingResponse
 import re
+import os
 
 app = FastAPI(title="Hogwarts Simulator API")
 
@@ -188,4 +189,4 @@ async def chat_endpoint(request: ChatRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=3000)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "3000")))
