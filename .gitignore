@@ -40,6 +40,7 @@ htmlcov/
 dist/
 build/
 output/
+.playwright-cli/
 
 # Logs
 logs/
