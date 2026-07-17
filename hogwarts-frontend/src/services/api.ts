@@ -24,7 +24,7 @@ export async function generateChapterTitle(userInput: string, contextSummary: st
 
 export async function sendChatRequest(
   userInput: string, 
-  characterUuid: string | undefined,
+  characterUuid: string,
   onMessage: (chunk: string) => void,
   onComplete: () => void,
   onError: (err: unknown) => void,
@@ -34,14 +34,14 @@ export async function sendChatRequest(
     await requirePrivacyConsent();
 
     // 1. Assemble Context
-    const character = characterUuid
-      ? await db.character.where('uuid').equals(characterUuid).first()
-      : await db.character.limit(1).first();
+    const character = await db.character.where('uuid').equals(characterUuid).first();
+    if (!character) throw new Error('找不到当前角色，已停止发送以避免混用其他存档');
 
-    const recentLogs = characterUuid
-      ? (await getActiveTimelineLogs(characterUuid)).slice(-10)
-      : await db.logs.orderBy('id').reverse().limit(10).toArray();
-    const worldLog = await db.world_log.orderBy('timestamp').toArray();
+    const recentLogs = (await getActiveTimelineLogs(characterUuid)).slice(-10);
+    const worldLog = await db.world_log
+      .where('characterUuid')
+      .equals(characterUuid)
+      .sortBy('timestamp');
 
     const context = {
       summary: character?.summary || "New Game",

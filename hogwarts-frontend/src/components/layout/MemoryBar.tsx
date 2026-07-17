@@ -37,22 +37,21 @@ export function MemoryBar({ isExpanded, onToggle, character }: MemoryBarProps) {
       () =>
         character.uuid
           ? db.logs.where('characterUuid').equals(character.uuid).toArray()
-          : db.logs.orderBy('id').toArray(),
+          : [],
       [character.uuid]
     ) || [];
 
   const handleArchiveDelete = async (id: number) => {
-    await db.logs.delete(id);
+    if (!character.uuid) return;
+    const log = await db.logs.get(id);
+    if (log?.characterUuid === character.uuid) await db.logs.delete(id);
   };
 
   const handleArchiveClear = async () => {
     try {
-      if (character.uuid) {
-        await db.logs.where('characterUuid').equals(character.uuid).delete();
-        await clearPensieveResumeState(character.uuid);
-        return;
-      }
-      await db.logs.clear();
+      if (!character.uuid) throw new Error('当前角色缺少 UUID，无法安全清空记忆');
+      await db.logs.where('characterUuid').equals(character.uuid).delete();
+      await clearPensieveResumeState(character.uuid);
     } catch (err) {
       console.error('Archive clear failed', err);
     }
@@ -61,23 +60,14 @@ export function MemoryBar({ isExpanded, onToggle, character }: MemoryBarProps) {
   const handleRestartConversation = async () => {
     try {
       const now = Date.now();
-      if (character.uuid) {
-        await db.logs.where('characterUuid').equals(character.uuid).delete();
-        await clearPensieveResumeState(character.uuid);
-        await db.logs.add({
-          turn_id: now,
-          content: "## 新的开始\\n\\n你轻轻触碰冥想盆的银色边缘，旧日回响像雾一样散去。\\n\\n请在下方输入你的下一步行动。",
-          type: 'system',
-          characterUuid: character.uuid,
-          timestamp: now
-        });
-        return;
-      }
-      await db.logs.clear();
+      if (!character.uuid) throw new Error('当前角色缺少 UUID，无法安全重开对话');
+      await db.logs.where('characterUuid').equals(character.uuid).delete();
+      await clearPensieveResumeState(character.uuid);
       await db.logs.add({
         turn_id: now,
         content: "## 新的开始\\n\\n你轻轻触碰冥想盆的银色边缘，旧日回响像雾一样散去。\\n\\n请在下方输入你的下一步行动。",
         type: 'system',
+        characterUuid: character.uuid,
         timestamp: now
       });
     } catch (err) {

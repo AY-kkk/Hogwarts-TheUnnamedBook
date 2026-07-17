@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
-import { db, addLog } from '../lib/db';
+import { createCharacterUuid } from '../lib/db';
 import { cn } from '../lib/utils';
 import { Sparkles, Scroll, Feather } from 'lucide-react';
 import { apiUrl } from '../config/api';
 import { requirePrivacyConsent } from '../services/privacy';
+import {
+  assertCharacterSlotAvailable,
+  createCharacterWithOpeningLog,
+} from '../services/characters';
 
 interface WizardProfileFormProps {
   onComplete: () => void;
@@ -64,43 +68,29 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
 
     try {
       await requirePrivacyConsent();
+      await assertCharacterSlotAvailable();
+      const characterUuid = createCharacterUuid();
 
-      // 1. Register Profile
-      const profileRes = await fetch(apiUrl('/api/wizard-profile'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-      
-      if (!profileRes.ok) throw new Error("Failed to create profile");
-      const { profileId } = await profileRes.json();
-
-      // 2. Start Story
       setLoadingText("正在编织命运...");
       const storyRes = await fetch(apiUrl('/api/story/start'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: profileId,
-          self_description: formData.self_description
-        })
+        body: JSON.stringify({ profile: formData })
       });
 
-      if (!storyRes.ok) throw new Error("Failed to start story");
+      if (!storyRes.ok) {
+        const errorBody = await storyRes.text();
+        throw new Error(`无法开启故事（${storyRes.status}）${errorBody ? `：${errorBody}` : ''}`);
+      }
       const { narrative } = await storyRes.json();
 
-      if (!narrative) {
+      if (typeof narrative !== 'string' || !narrative.trim()) {
         throw new Error("‘自我’描述未触发分支，请检查档案完整性");
       }
 
-      // 3. Save to Local DB
-      await db.transaction('rw', db.character, db.logs, async () => {
-        // Clear existing (just in case)
-        await db.character.clear();
-        await db.logs.clear();
-
-        await db.character.add({
-          uuid: profileId,
+      await createCharacterWithOpeningLog(
+        {
+          uuid: characterUuid,
           name: formData.name,
           gender: formData.gender,
           blood_status: formData.blood_status,
@@ -127,10 +117,9 @@ export function WizardProfileForm({ onComplete }: WizardProfileFormProps) {
             length: 11,
             flexibility: "Unknown"
           }
-        });
-
-        await addLog(Date.now(), narrative, 'ai', profileId);
-      });
+        },
+        narrative
+      );
 
       onComplete();
 

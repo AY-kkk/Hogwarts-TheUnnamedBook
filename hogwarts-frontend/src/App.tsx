@@ -14,6 +14,7 @@ import { cn } from './lib/utils';
 import { getActiveTimelineLogs } from './services/pensieveResume';
 import { PrivacyConsent } from './components/compliance/PrivacyConsent';
 import { hasPrivacyConsent } from './services/privacy';
+import { touchCharacter } from './services/characters';
 
 type AppState = 'landing' | 'selection' | 'create' | 'game';
 
@@ -105,8 +106,13 @@ function App() {
     </>
   );
 
-  const handleCharacterSelect = (char: Character) => {
+  const handleCharacterSelect = async (char: Character) => {
     if (char.id) {
+      try {
+        await touchCharacter(char.id);
+      } catch (error) {
+        console.error('Could not update last played time', error);
+      }
       setActiveCharacterId(char.id);
       setAppState('game');
     }
@@ -167,6 +173,7 @@ function App() {
       async () => {
         const finalText = await parseAndApplyState(accumulatedText, charUuid);
         if (aiLogId) await db.logs.update(aiLogId, { content: finalText });
+        if (activeCharacter.id) await touchCharacter(activeCharacter.id);
         setLoading(false);
         chatAbortRef.current = null;
       },

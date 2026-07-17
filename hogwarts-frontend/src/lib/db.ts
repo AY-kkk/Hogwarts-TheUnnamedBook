@@ -69,6 +69,7 @@ export interface Log {
 // Define the interface for the WorldLog table
 export interface WorldLog {
   id?: number;
+  characterUuid?: string;
   event_name: string;
   timestamp: number;
   description: string;
@@ -96,14 +97,57 @@ export class HogwartsDB extends Dexie {
       memories: '++id, characterUuid, timestamp',
       world_log: '++id, event_name, timestamp'
     });
-    // Keep version 2 for backward compatibility reference if needed, but Dexie handles upgrades
+    this.version(5)
+      .stores({
+        settings: 'key',
+        character: '++id, uuid, name, lastPlayed, synced',
+        logs: '++id, characterUuid, turn_id, type, timestamp',
+        memories: '++id, characterUuid, timestamp',
+        world_log: '++id, characterUuid, event_name, timestamp'
+      })
+      .upgrade(async (transaction) => {
+        const characterTable = transaction.table<Character>('character');
+        const characters = await characterTable.toArray();
+
+        for (const character of characters) {
+          if (!character.uuid) {
+            await characterTable.put({ ...character, uuid: createCharacterUuid() });
+          }
+        }
+
+        const migratedCharacters = await characterTable.toArray();
+        if (migratedCharacters.length !== 1 || !migratedCharacters[0].uuid) return;
+
+        // Only a single-character legacy database has an unambiguous owner. With
+        // multiple legacy characters, unscoped records stay preserved as orphans
+        // rather than being attached to the wrong save.
+        const soleCharacterUuid = migratedCharacters[0].uuid;
+        await transaction.table<Log>('logs').toCollection().modify((log) => {
+          if (!log.characterUuid) log.characterUuid = soleCharacterUuid;
+        });
+        await transaction.table<Memory>('memories').toCollection().modify((memory) => {
+          if (!memory.characterUuid) memory.characterUuid = soleCharacterUuid;
+        });
+        await transaction.table<WorldLog>('world_log').toCollection().modify((worldLog) => {
+          if (!worldLog.characterUuid) worldLog.characterUuid = soleCharacterUuid;
+        });
+      });
   }
 }
 
 export const db = new HogwartsDB();
 
+export function createCharacterUuid(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  const randomPart = Math.random().toString(36).slice(2, 12);
+  return `character-${Date.now().toString(36)}-${randomPart}`;
+}
+
 // Helper to save a log
-export async function addLog(turnId: number, content: string, type: 'user' | 'ai' | 'system', characterUuid?: string) {
+export async function addLog(turnId: number, content: string, type: 'user' | 'ai' | 'system', characterUuid: string) {
   return await db.logs.add({
     turn_id: turnId,
     content,
@@ -114,6 +158,10 @@ export async function addLog(turnId: number, content: string, type: 'user' | 'ai
 }
 
 // Helper to get recent logs
-export async function getRecentLogs(limit = 20) {
-  return await db.logs.orderBy('turn_id').reverse().limit(limit).toArray();
+export async function getRecentLogs(characterUuid: string, limit = 20) {
+  const logs = await db.logs
+    .where('characterUuid')
+    .equals(characterUuid)
+    .toArray();
+  return logs.sort((a, b) => b.turn_id - a.turn_id).slice(0, limit);
 }

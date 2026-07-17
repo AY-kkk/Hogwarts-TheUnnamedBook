@@ -4,7 +4,7 @@ import { db } from '../lib/db';
  * Extracts <state_update> JSON from text and updates the database.
  * Returns the cleaned text (without the tags).
  */
-export async function parseAndApplyState(fullText: string, characterUuid?: string): Promise<string> {
+export async function parseAndApplyState(fullText: string, characterUuid: string): Promise<string> {
   const tagRegex = /<state_update>([\s\S]*?)<\/state_update>/;
   const match = fullText.match(tagRegex);
 
@@ -15,9 +15,7 @@ export async function parseAndApplyState(fullText: string, characterUuid?: strin
       
       console.log("Applying State Update:", updateData);
       const getChar = async () =>
-        characterUuid
-          ? await db.character.where('uuid').equals(characterUuid).first()
-          : await db.character.limit(1).first();
+        await db.character.where('uuid').equals(characterUuid).first();
 
       // 1. Update Character Status
       if (updateData.status) {
@@ -59,6 +57,7 @@ export async function parseAndApplyState(fullText: string, characterUuid?: strin
       // 4. World Log
       if (updateData.world_log_add) {
         await db.world_log.add({
+          characterUuid,
           event_name: updateData.world_log_add,
           timestamp: Date.now(),
           description: "World Event"

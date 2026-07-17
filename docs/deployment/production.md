@@ -73,7 +73,7 @@ Replace placeholder secrets before starting the API.
 ## Pre-production checks
 
 - The frontend bundle contains the production HTTPS API origin and no provider key.
-- `/health`, `/api/wizard-profile`, `/api/story/start`, `/api/chapter/title`, and `/api/chat` are reachable through HTTPS.
+- `/health`, `/api/story/start`, `/api/chapter/title`, and `/api/chat` are reachable through HTTPS.
 - The configured CORS allowlist contains only approved frontend origins.
 - Container logs are collected by the platform and do not expose request bodies or secrets.
-- The current in-memory profile store is not considered production persistence; it must be removed or redesigned by the P0 data-isolation task before release.
+- Character profiles and story history remain in the user's IndexedDB; the API is stateless and does not keep an in-memory profile registry.

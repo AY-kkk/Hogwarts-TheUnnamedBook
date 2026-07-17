@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, List
@@ -35,8 +35,7 @@ class WizardProfile(BaseModel):
     self_description: str
 
 class StoryStartRequest(BaseModel):
-    profile_id: str
-    self_description: str
+    profile: WizardProfile
 
 class ChapterTitleRequest(BaseModel):
     user_input: str
@@ -58,57 +57,16 @@ def _normalize_chapter_title(text: str) -> str:
         title = title[:20]
     return title
 
-# In-memory storage for profiles (for now)
-PROFILES = {}
-
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "timestamp": time.time()}
 
-@app.get("/api/characters")
-async def get_characters():
-    return [
-        {**p, "id": pid} 
-        for pid, p in PROFILES.items()
-    ]
-
-@app.post("/api/wizard-profile")
-async def create_wizard_profile(profile: WizardProfile):
-    import uuid
-    if len(PROFILES) >= 3:
-        raise HTTPException(status_code=400, detail="Character slot limit reached (3)")
-        
-    profile_id = str(uuid.uuid4())
-    profile_data = profile.dict()
-    profile_data.update({
-        "level": 1,
-        "created_at": time.time(),
-        "last_played": time.time()
-    })
-    PROFILES[profile_id] = profile_data
-    return {"profileId": profile_id}
-
-@app.delete("/api/character/{profile_id}")
-async def delete_character(profile_id: str):
-    if profile_id in PROFILES:
-        del PROFILES[profile_id]
-        return {"status": "deleted"}
-    raise HTTPException(status_code=404, detail="Profile not found")
-
 @app.post("/api/story/start")
 async def start_story(request: StoryStartRequest):
-    profile = PROFILES.get(request.profile_id)
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    
-    # Verify self_description matches (or just use the one from request if needed)
-    # The requirement says "把“自我”字段作为核心参数传入", so we prioritize request
-    
-    # Here we would normally invoke the agent to generate the prologue.
-    # For now, let's create a specialized prologue generation logic.
     from app.services.agent_workflow import generate_prologue
-    
-    narrative = await generate_prologue(profile, request.self_description)
+
+    profile = request.profile.model_dump()
+    narrative = await generate_prologue(profile, request.profile.self_description)
     return {"narrative": narrative}
 
 @app.post("/api/chapter/title", response_model=ChapterTitleResponse)

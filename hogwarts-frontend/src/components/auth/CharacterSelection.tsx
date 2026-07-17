@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Character } from '../../lib/db';
 import { CharacterCard } from './CharacterCard';
 import { Sparkles } from 'lucide-react';
+import { deleteCharacterData, MAX_CHARACTER_SLOTS } from '../../services/characters';
 
 interface CharacterSelectionProps {
   onSelectCharacter: (character: Character) => void;
@@ -10,13 +11,20 @@ interface CharacterSelectionProps {
 }
 
 export function CharacterSelection({ onSelectCharacter, onCreateNew }: CharacterSelectionProps) {
-  const characters = useLiveQuery(() => db.character.toArray()) || [];
+  const characters = useLiveQuery(
+    async () => (await db.character.toArray()).sort(
+      (a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0)
+    )
+  ) || [];
 
   const handleDelete = async (id: number) => {
     if (confirm("Are you sure you want to delete this wizard? This cannot be undone (Avada Kedavra!).")) {
-      await db.character.delete(id);
-      // Also delete related logs/memories
-      // await db.logs.where('characterId').equals(id).delete();
+      try {
+        await deleteCharacterData(id);
+      } catch (error) {
+        console.error('Character deletion failed', error);
+        alert(error instanceof Error ? error.message : '删除失败，请稍后再试');
+      }
     }
   };
 
@@ -53,7 +61,7 @@ export function CharacterSelection({ onSelectCharacter, onCreateNew }: Character
         ))}
 
         {/* Empty Slots (Up to 3) */}
-        {Array.from({ length: Math.max(0, 3 - characters.length) }).map((_, i) => (
+        {Array.from({ length: Math.max(0, MAX_CHARACTER_SLOTS - characters.length) }).map((_, i) => (
           <CharacterCard 
             key={`empty-${i}`} 
             isEmpty 
@@ -64,7 +72,7 @@ export function CharacterSelection({ onSelectCharacter, onCreateNew }: Character
 
       {/* Footer Info */}
       <div className="absolute bottom-8 text-parchment-300/50 text-sm font-ui">
-        {characters.length}/3 Slots Used
+        {characters.length}/{MAX_CHARACTER_SLOTS} Slots Used
       </div>
     </div>
   );
