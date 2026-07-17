@@ -27,8 +27,17 @@ interface StatusPatch extends Partial<Omit<GameStatus, 'attributes' | 'inventory
   attributes?: Partial<CharacterAttributes>;
 }
 
+export type TurnKind = 'prologue' | 'weekly' | 'event_start' | 'event_continue' | 'event_resolve';
+
+export interface TurnSettlement {
+  kind: TurnKind;
+  ap_cost: number;
+  target_prologue_turn?: number;
+}
+
 export interface StateUpdate {
   event_id: string;
+  turn: TurnSettlement;
   status?: StatusPatch;
   house?: House;
   inventory_events?: InventoryEvent[];
@@ -38,7 +47,7 @@ export interface StateUpdate {
 }
 
 const UPDATE_KEYS = new Set([
-  'event_id', 'status', 'house', 'inventory_events', 'spells', 'relationships', 'world_log_add',
+  'event_id', 'turn', 'status', 'house', 'inventory_events', 'spells', 'relationships', 'world_log_add',
 ]);
 const STATUS_KEYS = new Set([
   'hp', 'mp', 'max_mp', 'gold', 'ap', 'max_ap', 'level', 'exp', 'attributes', 'location',
@@ -46,6 +55,7 @@ const STATUS_KEYS = new Set([
   'prologue_turn', 'chapter',
 ]);
 const ATTRIBUTE_KEYS = new Set(['knowledge', 'athletics', 'charm', 'morality', 'mental']);
+const TURN_KINDS = ['prologue', 'weekly', 'event_start', 'event_continue', 'event_resolve'] as const;
 
 function asObject(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -147,7 +157,28 @@ export function validateStateUpdate(value: unknown): StateUpdate {
     throw new StateValidationError('event_id contains unsupported characters');
   }
 
-  const update: StateUpdate = { event_id: eventId };
+  const turnInput = asObject(input.turn, 'turn');
+  assertKnownKeys(turnInput, new Set(['kind', 'ap_cost', 'target_prologue_turn']), 'turn');
+  if (!TURN_KINDS.includes(turnInput.kind as TurnKind)) {
+    throw new StateValidationError(`turn.kind must be one of ${TURN_KINDS.join(', ')}`);
+  }
+  const turn: TurnSettlement = {
+    kind: turnInput.kind as TurnKind,
+    ap_cost: numberInRange(turnInput.ap_cost, 0, 10, 'turn.ap_cost'),
+  };
+  if ('target_prologue_turn' in turnInput) {
+    turn.target_prologue_turn = numberInRange(
+      turnInput.target_prologue_turn, 1, 9, 'turn.target_prologue_turn'
+    );
+  }
+  if (turn.kind === 'prologue' && turn.target_prologue_turn === undefined) {
+    throw new StateValidationError('turn.target_prologue_turn is required for prologue');
+  }
+  if (turn.kind !== 'prologue' && turn.target_prologue_turn !== undefined) {
+    throw new StateValidationError('turn.target_prologue_turn is only valid for prologue');
+  }
+
+  const update: StateUpdate = { event_id: eventId, turn };
   if ('status' in input) update.status = validateStatusPatch(input.status);
   if ('house' in input) {
     if (!HOUSES.includes(input.house as House)) {
@@ -196,7 +227,7 @@ export function validateStateUpdate(value: unknown): StateUpdate {
   if ('world_log_add' in input) {
     update.world_log_add = stringInRange(input.world_log_add, 1, 500, 'world_log_add');
   }
-  if (Object.keys(update).length === 1) {
+  if (Object.keys(update).length === 2) {
     throw new StateValidationError('state_update must contain at least one change');
   }
   return update;
@@ -215,6 +246,117 @@ function mergeStatus(current: GameStatus, patch: StatusPatch | undefined): GameS
   return next;
 }
 
+const PROLOGUE_CALENDAR: Record<number, { month: number; week: number }> = {
+  1: { month: 7, week: 4 },
+  2: { month: 8, week: 1 },
+  3: { month: 8, week: 2 },
+  4: { month: 8, week: 2 },
+  5: { month: 8, week: 4 },
+  6: { month: 9, week: 1 },
+  7: { month: 9, week: 1 },
+  8: { month: 9, week: 1 },
+  9: { month: 9, week: 1 },
+};
+
+function sameCalendar(left: GameStatus, right: GameStatus): boolean {
+  return left.current_year === right.current_year
+    && left.current_month === right.current_month
+    && left.current_week === right.current_week;
+}
+
+function expectedNextWeek(current: GameStatus): Pick<GameStatus, 'current_year' | 'current_month' | 'current_week'> {
+  if (current.current_week < 4) {
+    return { ...current, current_week: current.current_week + 1 };
+  }
+  if (current.current_month < 12) {
+    return { ...current, current_month: current.current_month + 1, current_week: 1 };
+  }
+  return { ...current, current_year: current.current_year + 1, current_month: 1, current_week: 1 };
+}
+
+function assertCalendar(
+  next: GameStatus,
+  expected: Pick<GameStatus, 'current_year' | 'current_month' | 'current_week'>,
+  label: string
+): void {
+  if (next.current_year !== expected.current_year
+    || next.current_month !== expected.current_month
+    || next.current_week !== expected.current_week) {
+    throw new StateValidationError(`${label} calendar transition is invalid`);
+  }
+}
+
+export function validateStatusTransition(
+  current: GameStatus,
+  next: GameStatus,
+  turn: TurnSettlement
+): void {
+  if (current.game_mode === 'prologue') {
+    if (turn.kind !== 'prologue' || turn.ap_cost !== 0) {
+      throw new StateValidationError('prologue updates require a zero-AP prologue settlement');
+    }
+    const currentTurn = current.prologue_turn;
+    const target = turn.target_prologue_turn as number;
+    if (target !== currentTurn && target !== currentTurn + 1) {
+      throw new StateValidationError('prologue can only stay on the current turn or advance by one');
+    }
+    if (next.prologue_turn !== target) {
+      throw new StateValidationError('status.prologue_turn must match turn.target_prologue_turn');
+    }
+    const expected = PROLOGUE_CALENDAR[target];
+    if (next.current_month !== expected.month || next.current_week !== expected.week) {
+      throw new StateValidationError('prologue calendar does not match the target turn');
+    }
+    const targetMode = target === 9 ? 'weekly' : 'prologue';
+    if (next.game_mode !== targetMode) {
+      throw new StateValidationError(`Turn ${target} must use ${targetMode} mode`);
+    }
+    if (target === 9 && (next.ap !== 7 || next.max_ap !== 7)) {
+      throw new StateValidationError('weekly mode must start with 7 AP');
+    }
+    return;
+  }
+
+  if (current.game_mode === 'weekly') {
+    if (turn.kind === 'event_start') {
+      if (turn.ap_cost !== 0 || next.game_mode !== 'event' || !sameCalendar(current, next)) {
+        throw new StateValidationError('event start must freeze calendar and consume zero AP');
+      }
+      if (next.ap !== current.ap || next.max_ap !== current.max_ap) {
+        throw new StateValidationError('event start must preserve AP');
+      }
+      return;
+    }
+    if (turn.kind !== 'weekly' || next.game_mode !== 'weekly') {
+      throw new StateValidationError('weekly mode requires a weekly settlement or event start');
+    }
+    if (turn.ap_cost > current.ap + 3) {
+      throw new StateValidationError('weekly AP cost exceeds the three-point overdraft limit');
+    }
+    assertCalendar(next, expectedNextWeek(current), 'weekly');
+    const overdraft = Math.max(0, turn.ap_cost - current.ap);
+    const nextLimit = 7 - overdraft;
+    if (next.max_ap !== nextLimit || next.ap !== nextLimit) {
+      throw new StateValidationError('next-week AP does not match the declared AP cost');
+    }
+    return;
+  }
+
+  if (turn.kind !== 'event_continue' && turn.kind !== 'event_resolve') {
+    throw new StateValidationError('event mode requires continue or resolve settlement');
+  }
+  if (turn.ap_cost !== 0 || !sameCalendar(current, next)) {
+    throw new StateValidationError('event mode must freeze calendar and consume zero AP');
+  }
+  if (next.ap !== current.ap || next.max_ap !== current.max_ap) {
+    throw new StateValidationError('event mode must preserve AP');
+  }
+  const expectedMode = turn.kind === 'event_resolve' ? 'weekly' : 'event';
+  if (next.game_mode !== expectedMode) {
+    throw new StateValidationError(`${turn.kind} must transition to ${expectedMode}`);
+  }
+}
+
 export async function applyStateUpdate(
   characterUuid: string,
   rawUpdate: unknown
@@ -228,6 +370,7 @@ export async function applyStateUpdate(
     if (!character?.id) throw new StateValidationError('找不到待更新的角色');
 
     const status = mergeStatus(character.status, update.status);
+    validateStatusTransition(character.status, status, update.turn);
     const inventory = [...status.inventory];
     for (const event of update.inventory_events ?? []) {
       if (event.op === 'add' && !inventory.includes(event.item)) inventory.push(event.item);

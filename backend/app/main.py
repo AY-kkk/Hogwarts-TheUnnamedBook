@@ -28,6 +28,7 @@ from app.observability import (
 )
 from app.services.prompt_service import prompt_service
 from app.content_safety import inspect_content
+from app.game_rules import RuleContextError, validate_status_snapshot
 
 security_settings = SecuritySettings.from_env()
 session_tokens = SessionTokenManager(
@@ -339,6 +340,10 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
     if context_chars > security_settings.max_context_chars:
         raise HTTPException(status_code=413, detail="Story context too large")
     require_safe_content(request.user_input)
+    try:
+        validate_status_snapshot(request.context.get("status_snapshot"))
+    except RuleContextError as exc:
+        raise HTTPException(status_code=422, detail={"code": "invalid_game_state", "message": str(exc)}) from exc
     input_characters = len(request.user_input) + context_chars
     reservation = reserve_ai_budget(_session_id, input_characters, 30000)
 

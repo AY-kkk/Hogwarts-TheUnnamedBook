@@ -15,13 +15,20 @@ class NarratorAgent:
             prompt_service.get_template("narrator_chat")
         )
 
-    async def narrate(self, user_input: str, simulation_result: str, context: dict):
+    async def narrate(
+        self,
+        user_input: str,
+        simulation_result: str,
+        context: dict,
+        turn_directive: str,
+    ):
         is_chat = simulation_result == "Chat Mode"
         prompt = self.chat_prompt if is_chat else self.action_prompt
         chain = prompt | self.llm | StrOutputParser()
         values = {
             "user_input": user_input,
             "context_summary": str(context),
+            "turn_directive": turn_directive,
         }
         if not is_chat:
             values["simulation_result"] = simulation_result

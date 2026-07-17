@@ -1,4 +1,4 @@
-export const STATE_SCHEMA_VERSION = 'state-2026.07.17.1';
+export const STATE_SCHEMA_VERSION = 'state-2026.07.17.2';
 
 export const HOUSES = ['Unsorted', 'Gryffindor', 'Slytherin', 'Ravenclaw', 'Hufflepuff'] as const;
 export const GAME_MODES = ['prologue', 'weekly', 'event'] as const;

@@ -5,6 +5,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
 
 from app.models.agent_state import GameState
+from app.game_rules import build_turn_directive
 from app.services.agents.intent_agent import IntentAnalyzer
 from app.services.agents.narrator_agent import NarratorAgent
 from app.services.agents.simulator_agent import SimulatorAgent
@@ -70,8 +71,11 @@ class AgentWorkflow:
 
     async def generate_narrative(self, state: GameState):
         simulation = state.get("simulation_result", "Chat Mode")
+        directive = build_turn_directive(
+            state["context"].get("status_snapshot", {})
+        ).to_prompt()
         narrative = await self.narrator_agent.narrate(
-            state["user_input"], simulation, state["context"]
+            state["user_input"], simulation, state["context"], directive
         )
         return {
             "narrative": narrative,

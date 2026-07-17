@@ -61,7 +61,10 @@ export async function sendChatRequest(
 
     const context = {
       summary: character?.summary || "New Game",
-      status_snapshot: character?.status || {},
+      status_snapshot: {
+        ...character.status,
+        spells: character.spells ?? {},
+      },
       recent_logs: recentLogs.reverse().map(l => ({ role: l.type, content: l.content })),
       world_log: worldLog.map(w => w.event_name)
     };

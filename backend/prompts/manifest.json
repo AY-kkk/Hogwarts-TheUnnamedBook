@@ -1,7 +1,7 @@
 {
-  "prompt_version": "prompt-2026.07.17.2",
-  "rules_version": "rules-2026.07.17.2",
-  "state_schema_version": "state-2026.07.17.1",
+  "prompt_version": "prompt-2026.07.17.3",
+  "rules_version": "rules-2026.07.17.3",
+  "state_schema_version": "state-2026.07.17.2",
   "rules": {
     "core": "system_core_rules.md",
     "prologue": "system_prologue_rules.md"
@@ -17,11 +17,11 @@
     },
     "narrator_action": {
       "file": "narrator_action.md",
-      "variables": ["context_summary", "simulation_result", "user_input"]
+      "variables": ["context_summary", "simulation_result", "turn_directive", "user_input"]
     },
     "narrator_chat": {
       "file": "narrator_chat.md",
-      "variables": ["context_summary", "user_input"]
+      "variables": ["context_summary", "turn_directive", "user_input"]
     },
     "prologue": {
       "file": "prologue_prompt.md",
