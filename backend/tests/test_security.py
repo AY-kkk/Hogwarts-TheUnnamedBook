@@ -1,6 +1,8 @@
 import importlib
 import os
 import sys
+import tempfile
+import uuid
 
 from fastapi.testclient import TestClient
 
@@ -17,6 +19,9 @@ def load_app(**environment):
         "MAX_CONTEXT_CHARS": "100",
         "METRICS_TOKEN": "test-metrics-token-with-at-least-32-characters",
         "SESSION_BUDGET_USD": "0.50",
+        "MODEL_CONFIG_DB_PATH": str(
+            tempfile.gettempdir() + f"/hogwarts-admin-test-{uuid.uuid4().hex}.db"
+        ),
     }
     os.environ.update(defaults | environment)
     sys.modules.pop("app.main", None)

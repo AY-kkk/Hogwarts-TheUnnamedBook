@@ -291,12 +291,27 @@ class ModelConfigRepository:
             ).fetchone()
         if row is None:
             return None
+        runtime = self._runtime_provider(row)
+        if not runtime.active_model:
+            raise RepositoryError("active provider has no selected model")
+        return runtime
+
+    def get_runtime(self, provider_id: str) -> RuntimeProvider:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM model_providers WHERE id = ?", (provider_id,)
+            ).fetchone()
+        if row is None:
+            raise ProviderNotFoundError(provider_id)
+        if not row["is_enabled"]:
+            raise ProviderDisabledError("provider must be enabled before connecting")
+        return self._runtime_provider(row)
+
+    def _runtime_provider(self, row: sqlite3.Row) -> RuntimeProvider:
         try:
             api_key = self._fernet.decrypt(row["api_key_ciphertext"]).decode("utf-8")
         except (InvalidToken, UnicodeDecodeError) as exc:
-            raise RepositoryError("active provider credentials cannot be decrypted") from exc
-        if not row["active_model"]:
-            raise RepositoryError("active provider has no selected model")
+            raise RepositoryError("provider credentials cannot be decrypted") from exc
         return RuntimeProvider(
             id=row["id"],
             name=row["name"],
@@ -410,4 +425,3 @@ class ModelConfigRepository:
             )
             for row in rows
         ]
-

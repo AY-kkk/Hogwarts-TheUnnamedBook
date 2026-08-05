@@ -73,7 +73,7 @@ class RuntimeProvider(BaseModel):
     preset: ProviderPreset
     base_url: str
     api_key: str
-    active_model: str
+    active_model: str | None
 
 
 class ConnectionTestResult(BaseModel):

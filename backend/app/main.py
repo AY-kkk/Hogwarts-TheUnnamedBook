@@ -29,8 +29,21 @@ from app.observability import (
 from app.services.prompt_service import prompt_service
 from app.content_safety import inspect_content
 from app.game_rules import RuleContextError, validate_status_snapshot
+from app.admin.compatible_client import OpenAICompatibleClient
+from app.admin.repository import ModelConfigRepository
+from app.admin.router import create_admin_router
+from app.admin.settings import AdminSettings
 
 security_settings = SecuritySettings.from_env()
+admin_settings = AdminSettings.from_env()
+model_repository = ModelConfigRepository(
+    admin_settings.database_path,
+    admin_settings.encryption_key,
+)
+compatible_client = OpenAICompatibleClient(
+    app_env=admin_settings.app_env,
+    allow_private_endpoints=admin_settings.allow_private_endpoints,
+)
 session_tokens = SessionTokenManager(
     security_settings.session_secret,
     security_settings.session_ttl_seconds,
@@ -60,9 +73,17 @@ app = FastAPI(title="Hogwarts Simulator API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(security_settings.cors_allowed_origins),
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Character-ID"],
+)
+app.include_router(
+    create_admin_router(
+        settings=admin_settings,
+        repository=model_repository,
+        compatible_client=compatible_client,
+        allowed_origins=security_settings.cors_allowed_origins,
+    )
 )
 
 class ChatRequest(BaseModel):
