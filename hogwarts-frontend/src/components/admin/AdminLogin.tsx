@@ -1,0 +1,90 @@
+import { useState, type FormEvent } from 'react';
+import { KeyRound, ShieldCheck } from 'lucide-react';
+
+import { adminLogin, type AdminSession } from '../../services/adminApi';
+
+interface AdminLoginProps {
+  onAuthenticated: (session: AdminSession) => void;
+}
+
+export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await adminLogin(username, password);
+      setPassword('');
+      onAuthenticated({ authenticated: true, username });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '登录失败，请稍后重试');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="admin-login-page">
+      <section className="admin-login-intro" aria-label="管理台简介">
+        <div className="admin-brand-mark" aria-hidden="true">
+          <ShieldCheck size={34} strokeWidth={1.7} />
+        </div>
+        <p className="admin-kicker">The Unnamed Book</p>
+        <h1>模型控制室</h1>
+        <p>
+          在一个安全入口中配置兼容 OpenAI Chat Completions 协议的模型，完成连接测试并实时切换游戏推理引擎。
+        </p>
+        <div className="admin-login-capabilities" aria-label="后台能力">
+          <span>加密保存密钥</span>
+          <span>无需重启切换</span>
+          <span>脱敏用量记录</span>
+        </div>
+      </section>
+
+      <section className="admin-login-panel" aria-labelledby="admin-login-title">
+        <div className="admin-login-heading">
+          <KeyRound size={22} strokeWidth={1.8} aria-hidden="true" />
+          <div>
+            <h2 id="admin-login-title">管理员验证</h2>
+            <p>凭据只会发送到当前产品后端。</p>
+          </div>
+        </div>
+        <form onSubmit={submit} className="admin-form">
+          <label className="admin-field">
+            <span>管理员用户名</span>
+            <input
+              autoComplete="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              disabled={isSubmitting}
+              required
+            />
+          </label>
+          <label className="admin-field">
+            <span>管理员密码</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              disabled={isSubmitting}
+              required
+            />
+          </label>
+          <p className="admin-form-error" role="alert" aria-live="polite">
+            {error}
+          </p>
+          <button className="admin-button admin-button-primary admin-button-wide" disabled={isSubmitting}>
+            {isSubmitting ? '正在验证' : '进入管理台'}
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
