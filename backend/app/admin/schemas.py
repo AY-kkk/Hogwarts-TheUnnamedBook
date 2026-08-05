@@ -76,6 +76,14 @@ class RuntimeProvider(BaseModel):
     active_model: str
 
 
+class ConnectionTestResult(BaseModel):
+    ok: bool
+    model: str
+    latency_ms: int = Field(ge=0)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+
+
 class UsageRecord(BaseModel):
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     endpoint: str = Field(min_length=1, max_length=80)
@@ -119,4 +127,3 @@ class AuditRecord(BaseModel):
     action: str
     target_id: str | None
     result: str
-
