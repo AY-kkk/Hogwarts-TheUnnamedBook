@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from app.admin.repository import ModelConfigRepository
+from app.admin.endpoint_policy import EndpointPolicyError
 from app.admin.schemas import ProviderCreate
 from app.observability import request_id_context
 from app.services.runtime_model import (
@@ -42,9 +43,13 @@ def _provider(
     return provider
 
 
+def _public_address(_hostname: str) -> list[str]:
+    return ["93.184.216.34"]
+
+
 def test_resolver_reads_active_provider_for_each_new_request(repo: ModelConfigRepository) -> None:
     first = _provider(repo, "First", "https://first.example/v1", "model-a")
-    resolver = RuntimeModelResolver(repo)
+    resolver = RuntimeModelResolver(repo, address_resolver=_public_address)
 
     one = resolver.resolve()
     second = _provider(repo, "Second", "https://second.example/v1", "model-b")
@@ -62,7 +67,7 @@ def test_bound_request_keeps_original_model_during_hot_switch(
     repo: ModelConfigRepository,
 ) -> None:
     _provider(repo, "First", "https://first.example/v1", "model-a")
-    resolver = RuntimeModelResolver(repo)
+    resolver = RuntimeModelResolver(repo, address_resolver=_public_address)
     original = resolver.resolve()
     token = bind_runtime_model(original)
     try:
@@ -85,12 +90,41 @@ def test_environment_fallback_is_used_only_without_active_database_provider(
 
     fallback = RuntimeModelResolver(repo).resolve()
     _provider(repo, "Database", "https://database.example/v1", "database-model")
-    database = RuntimeModelResolver(repo).resolve()
+    database = RuntimeModelResolver(repo, address_resolver=_public_address).resolve()
 
     assert fallback.source == "environment"
     assert fallback.model == "deepseek-chat"
     assert database.source == "database"
     assert database.model == "database-model"
+
+
+def test_runtime_resolution_rejects_a_provider_that_rebinds_to_private_dns(
+    repo: ModelConfigRepository,
+) -> None:
+    _provider(repo, "Rebound", "https://rebound.example/v1", "model-a")
+    resolver = RuntimeModelResolver(
+        repo,
+        app_env="production",
+        allow_private_endpoints=False,
+        address_resolver=lambda _hostname: ["127.0.0.1"],
+    )
+
+    with pytest.raises(EndpointPolicyError, match="private or non-public"):
+        resolver.resolve()
+
+
+def test_local_runtime_uses_a_direct_client_only_with_explicit_opt_in(
+    repo: ModelConfigRepository,
+) -> None:
+    _provider(repo, "Local", "http://127.0.0.1:9901/v1", "model-a")
+    resolved = RuntimeModelResolver(
+        repo,
+        app_env="development",
+        allow_private_endpoints=True,
+        address_resolver=lambda _hostname: ["127.0.0.1"],
+    ).resolve()
+
+    assert resolved.uses_non_public_endpoint is True
 
 
 def test_llm_factory_builds_database_compatible_client_per_call(
@@ -108,9 +142,15 @@ def test_llm_factory_builds_database_compatible_client_per_call(
 
     monkeypatch.setattr(llm_factory, "ChatOpenAI", fake_chat_openai)
 
-    one = llm_factory.LLMFactory.create_llm(repository=repo)
+    one = llm_factory.LLMFactory.create_llm(
+        repository=repo,
+        address_resolver=_public_address,
+    )
     _provider(repo, "Second", "https://second.example/v1", "model-b")
-    two = llm_factory.LLMFactory.create_llm(repository=repo)
+    two = llm_factory.LLMFactory.create_llm(
+        repository=repo,
+        address_resolver=_public_address,
+    )
 
     assert one["model"] == "model-a"
     assert one["base_url"] == "https://first.example/v1"
@@ -156,6 +196,7 @@ def test_budget_settlement_persists_captured_provider_usage(
         monkeypatch.setenv(name, value)
     sys.modules.pop("app.main", None)
     main = importlib.import_module("app.main")
+    monkeypatch.setattr(main.LLMFactory, "_address_resolver", _public_address)
     provider = _provider(
         main.model_repository,
         "Captured",

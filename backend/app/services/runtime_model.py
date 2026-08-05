@@ -5,6 +5,11 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Literal
 
+from app.admin.endpoint_policy import (
+    AddressResolver,
+    provider_url_uses_non_public_address,
+    validate_provider_url,
+)
 from app.admin.repository import ModelConfigRepository
 
 
@@ -17,6 +22,7 @@ class ResolvedModel:
     base_url: str | None
     api_key: str = field(repr=False)
     source: Literal["database", "environment"] = "environment"
+    uses_non_public_endpoint: bool = False
 
 
 _runtime_model_context: ContextVar[ResolvedModel | None] = ContextVar(
@@ -37,8 +43,24 @@ def current_runtime_model() -> ResolvedModel | None:
 
 
 class RuntimeModelResolver:
-    def __init__(self, repository: ModelConfigRepository | None = None):
+    def __init__(
+        self,
+        repository: ModelConfigRepository | None = None,
+        *,
+        app_env: str | None = None,
+        allow_private_endpoints: bool | None = None,
+        address_resolver: AddressResolver | None = None,
+    ):
         self._repository = repository
+        self._app_env = (app_env or os.getenv("APP_ENV", "development")).strip().lower()
+        if allow_private_endpoints is None:
+            allow_private_endpoints = os.getenv(
+                "ALLOW_PRIVATE_MODEL_ENDPOINTS", "false"
+            ).strip().lower() in {"1", "true", "yes", "on"}
+        self._allow_private_endpoints = (
+            allow_private_endpoints and self._app_env != "production"
+        )
+        self._address_resolver = address_resolver
 
     def resolve(self) -> ResolvedModel:
         bound = current_runtime_model()
@@ -49,14 +71,28 @@ class RuntimeModelResolver:
             if active is not None:
                 if not active.active_model:
                     raise RuntimeError("active model configuration is incomplete")
+                base_url = validate_provider_url(
+                    active.base_url,
+                    self._app_env,
+                    self._allow_private_endpoints,
+                    address_resolver=self._address_resolver,
+                )
+                uses_non_public_endpoint = (
+                    self._allow_private_endpoints
+                    and provider_url_uses_non_public_address(
+                        base_url,
+                        address_resolver=self._address_resolver,
+                    )
+                )
                 return ResolvedModel(
                     provider_id=active.id,
                     provider_name=active.name,
                     provider_type="openai-compatible",
                     model=active.active_model,
-                    base_url=active.base_url,
+                    base_url=base_url,
                     api_key=active.api_key,
                     source="database",
+                    uses_non_public_endpoint=uses_non_public_endpoint,
                 )
         return self._from_environment()
 

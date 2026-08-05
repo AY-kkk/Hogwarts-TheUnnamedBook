@@ -2,7 +2,8 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=3000
+    PORT=3000 \
+    MODEL_CONFIG_DB_PATH=/app/data/model-config.db
 
 WORKDIR /app
 
@@ -16,7 +17,11 @@ COPY backend/app ./app
 COPY backend/prompts ./backend/prompts
 COPY system_core_rules.md system_prologue_rules.md ./
 
+RUN mkdir -p /app/data && chown -R appuser:appuser /app/data
+
 USER appuser
+
+VOLUME ["/app/data"]
 
 EXPOSE 3000
 

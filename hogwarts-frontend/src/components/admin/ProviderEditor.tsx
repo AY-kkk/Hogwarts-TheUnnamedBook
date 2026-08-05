@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { KeyRound, X } from 'lucide-react';
 
 import type {
@@ -62,6 +62,8 @@ function splitModels(value: string): string[] {
 }
 
 export function ProviderEditor({ provider, onClose, onSave }: ProviderEditorProps) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [preset, setPreset] = useState<ProviderPreset>(provider?.preset ?? 'custom');
   const [name, setName] = useState(provider?.name ?? PRESETS.custom.name);
   const [baseUrl, setBaseUrl] = useState(provider?.base_url ?? '');
@@ -72,8 +74,33 @@ export function ProviderEditor({ provider, onClose, onSave }: ProviderEditorProp
   const [error, setError] = useState('');
 
   useEffect(() => {
+    const returnFocus = document.activeElement;
+    closeButtonRef.current?.focus();
+    return () => {
+      if (returnFocus instanceof HTMLElement) returnFocus.focus();
+    };
+  }, []);
+
+  useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape' && !isSaving) onClose();
+      if (event.key !== 'Tab') return;
+
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+        ) ?? [],
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
@@ -114,6 +141,7 @@ export function ProviderEditor({ provider, onClose, onSave }: ProviderEditorProp
   return (
     <div className="admin-modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="admin-editor"
         role="dialog"
         aria-modal="true"
@@ -125,7 +153,12 @@ export function ProviderEditor({ provider, onClose, onSave }: ProviderEditorProp
             <p className="admin-kicker">模型供应商</p>
             <h2 id="provider-editor-title">{provider ? '编辑配置' : '添加配置'}</h2>
           </div>
-          <button className="admin-icon-button" onClick={onClose} aria-label="关闭配置">
+          <button
+            ref={closeButtonRef}
+            className="admin-icon-button"
+            onClick={onClose}
+            aria-label="关闭配置"
+          >
             <X size={20} strokeWidth={1.8} />
           </button>
         </header>

@@ -44,7 +44,7 @@ describe('administrator API client', () => {
     await updateProvider('provider-1', { name: 'DeepSeek', api_key: '' });
 
     const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toBe('http://localhost:3000/api/admin/providers/provider-1');
+    expect(new URL(String(url)).pathname).toBe('/api/admin/providers/provider-1');
     expect(init?.credentials).toBe('include');
     expect(init?.method).toBe('PATCH');
     expect(JSON.parse(String(init?.body))).toEqual({ name: 'DeepSeek' });
@@ -81,15 +81,14 @@ describe('administrator API client', () => {
     expect((await activateProvider('provider-1', 'mock-chat')).is_active).toBe(true);
     await adminLogout();
 
-    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
-      'http://localhost:3000/api/admin/session',
-      'http://localhost:3000/api/admin/session',
-      'http://localhost:3000/api/admin/providers/provider-1/discover',
-      'http://localhost:3000/api/admin/providers/provider-1/test',
-      'http://localhost:3000/api/admin/providers/provider-1/activate',
-      'http://localhost:3000/api/admin/session',
+    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
+      '/api/admin/session',
+      '/api/admin/session',
+      '/api/admin/providers/provider-1/discover',
+      '/api/admin/providers/provider-1/test',
+      '/api/admin/providers/provider-1/activate',
+      '/api/admin/session',
     ]);
     expect(fetchMock.mock.calls.every(([, init]) => init?.credentials === 'include')).toBe(true);
   });
 });
-

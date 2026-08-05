@@ -14,7 +14,11 @@ from openai import (
     RateLimitError,
 )
 
-from app.admin.endpoint_policy import AddressResolver, validate_provider_url
+from app.admin.endpoint_policy import (
+    AddressResolver,
+    provider_url_uses_non_public_address,
+    validate_provider_url,
+)
 from app.admin.schemas import ConnectionTestResult, RuntimeProvider, validate_model_id
 
 
@@ -41,19 +45,28 @@ class OpenAICompatibleClient:
         self._transport = transport
         self._address_resolver = address_resolver
 
-    def _base_url(self, provider: RuntimeProvider) -> str:
-        return validate_provider_url(
+    def _endpoint(self, provider: RuntimeProvider) -> tuple[str, bool]:
+        base_url = validate_provider_url(
             provider.base_url,
             self._app_env,
             self._allow_private_endpoints,
             address_resolver=self._address_resolver,
         )
+        uses_non_public_address = provider_url_uses_non_public_address(
+            base_url,
+            address_resolver=self._address_resolver,
+        )
+        trust_environment = not (
+            self._allow_private_endpoints and uses_non_public_address
+        )
+        return base_url, trust_environment
 
-    def _http_client(self) -> httpx.AsyncClient:
+    def _http_client(self, *, trust_environment: bool) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             transport=self._transport,
             timeout=httpx.Timeout(self._timeout_seconds),
             follow_redirects=False,
+            trust_env=trust_environment,
         )
 
     async def _run(self, operation: Callable[[], object]):
@@ -96,10 +109,11 @@ class OpenAICompatibleClient:
             ) from exc
 
     async def list_models(self, provider: RuntimeProvider) -> list[str]:
-        http_client = self._http_client()
+        base_url, trust_environment = self._endpoint(provider)
+        http_client = self._http_client(trust_environment=trust_environment)
         client = AsyncOpenAI(
             api_key=provider.api_key,
-            base_url=self._base_url(provider),
+            base_url=base_url,
             http_client=http_client,
             max_retries=0,
         )
@@ -122,10 +136,11 @@ class OpenAICompatibleClient:
 
     async def test_chat(self, provider: RuntimeProvider, model: str) -> ConnectionTestResult:
         selected_model = validate_model_id(model)
-        http_client = self._http_client()
+        base_url, trust_environment = self._endpoint(provider)
+        http_client = self._http_client(trust_environment=trust_environment)
         client = AsyncOpenAI(
             api_key=provider.api_key,
-            base_url=self._base_url(provider),
+            base_url=base_url,
             http_client=http_client,
             max_retries=0,
         )
@@ -153,4 +168,3 @@ class OpenAICompatibleClient:
             )
         finally:
             await client.close()
-

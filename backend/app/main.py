@@ -53,7 +53,11 @@ compatible_client = OpenAICompatibleClient(
     app_env=admin_settings.app_env,
     allow_private_endpoints=admin_settings.allow_private_endpoints,
 )
-LLMFactory.configure_repository(model_repository)
+LLMFactory.configure_repository(
+    model_repository,
+    app_env=admin_settings.app_env,
+    allow_private_endpoints=admin_settings.allow_private_endpoints,
+)
 session_tokens = SessionTokenManager(
     security_settings.session_secret,
     security_settings.session_ttl_seconds,

@@ -943,18 +943,36 @@
 
   .admin-login-intro {
     min-height: auto;
-    padding: 42px 24px;
+    padding: 30px 24px;
     border-right: 0;
     border-bottom: 1px solid var(--admin-line);
   }
 
   .admin-login-intro h1 {
     max-width: none;
+    margin-top: 16px;
     font-size: 42px;
   }
 
+  .admin-login-intro > p:not(.admin-kicker) {
+    margin-top: 16px;
+    line-height: 1.65;
+  }
+
+  .admin-login-capabilities {
+    margin-top: 24px;
+  }
+
   .admin-login-panel {
-    padding: 42px 24px 64px;
+    padding: 30px 24px 42px;
+  }
+
+  .admin-login-heading {
+    margin-bottom: 24px;
+  }
+
+  .admin-login-panel .admin-form {
+    gap: 16px;
   }
 
   .admin-topbar-inner,

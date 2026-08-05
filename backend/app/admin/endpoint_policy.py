@@ -30,6 +30,19 @@ def _is_non_public(address: str) -> bool:
     return not ip.is_global
 
 
+def provider_url_uses_non_public_address(
+    url: str,
+    *,
+    address_resolver: AddressResolver | None = None,
+) -> bool:
+    hostname = urlsplit(url).hostname
+    if not hostname:
+        raise EndpointPolicyError("provider URL must include a hostname")
+    resolver = address_resolver or _resolve_addresses
+    addresses = resolver(hostname)
+    return any(_is_non_public(address) for address in addresses)
+
+
 def validate_provider_url(
     url: str,
     app_env: str,
@@ -74,4 +87,3 @@ def validate_provider_url(
 
     normalized_path = parsed.path.rstrip("/")
     return urlunsplit((parsed.scheme, parsed.netloc, normalized_path, "", ""))
-

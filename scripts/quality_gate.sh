@@ -17,6 +17,15 @@ fi
 export PYTHONPATH="$ROOT/backend"
 export APP_ENV="test"
 export SESSION_SECRET="quality-gate-session-secret-32-characters"
+export ADMIN_USERNAME="quality-admin"
+export ADMIN_PASSWORD="quality-gate-admin-password"
+export ADMIN_SESSION_SECRET="quality-gate-admin-session-secret-32-characters"
+export MODEL_CONFIG_ENCRYPTION_KEY
+MODEL_CONFIG_ENCRYPTION_KEY="$("$PYTHON" -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+QUALITY_TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$QUALITY_TMP_DIR"' EXIT
+export MODEL_CONFIG_DB_PATH="$QUALITY_TMP_DIR/model-config.db"
+export ALLOW_PRIVATE_MODEL_ENDPOINTS="true"
 export METRICS_TOKEN="quality-gate-metrics-token-32-characters"
 export CORS_ALLOWED_ORIGINS="https://frontend.invalid.example"
 export VITE_API_BASE_URL="https://api.invalid.example"
@@ -25,7 +34,7 @@ export VITE_PRIVACY_CONTACT="privacy@example.com"
 export VITE_MODEL_DATA_DESTINATIONS="Quality Gate Model Region"
 export VITE_MINIMUM_AGE="16"
 
-echo "[1/8] Backend tests"
+echo "[1/8] Backend tests including local protocol E2E"
 "$PYTHON" -m pytest -q backend/tests
 
 echo "[2/8] Backend bytecode compilation"

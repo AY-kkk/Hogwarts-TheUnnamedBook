@@ -49,3 +49,4 @@ logs/
 # Local/Private
 private/
 secrets/
+data/

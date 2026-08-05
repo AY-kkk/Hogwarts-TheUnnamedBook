@@ -123,5 +123,17 @@ describe('administrator console', () => {
     expect(await screen.findByText('该供应商未提供模型列表')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '激活 deepseek-v4-pro' })).toBeEnabled();
   });
-});
 
+  it('keeps keyboard focus inside the provider editor and restores its trigger', async () => {
+    render(<AdminApp />);
+
+    const trigger = await screen.findByRole('button', { name: '添加供应商' });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    expect(await screen.findByRole('button', { name: '关闭配置' })).toHaveFocus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+});
