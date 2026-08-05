@@ -1,47 +1,64 @@
-import os
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from dotenv import load_dotenv
+from __future__ import annotations
 
-load_dotenv()
+from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
+
+from app.admin.repository import ModelConfigRepository
+from app.services.runtime_model import ResolvedModel, RuntimeModelResolver
+
 
 class LLMFactory:
-    @staticmethod
-    def create_llm(provider: str = None, model_name: str = None):
-        provider = provider or os.getenv("LLM_PROVIDER", "openai")
-        model_name = model_name or os.getenv("LLM_MODEL_NAME", "gpt-4o")
-        
-        if provider == "openai":
-            return ChatOpenAI(
-                model=model_name,
-                temperature=0.7,
-                streaming=False,
-                api_key=os.getenv("OPENAI_API_KEY")
+    _repository: ModelConfigRepository | None = None
+
+    @classmethod
+    def configure_repository(cls, repository: ModelConfigRepository) -> None:
+        cls._repository = repository
+
+    @classmethod
+    def describe_active(
+        cls, repository: ModelConfigRepository | None = None
+    ) -> ResolvedModel:
+        return RuntimeModelResolver(repository or cls._repository).resolve()
+
+    @classmethod
+    def create_llm(
+        cls,
+        provider: str | None = None,
+        model_name: str | None = None,
+        *,
+        repository: ModelConfigRepository | None = None,
+        resolved: ResolvedModel | None = None,
+    ):
+        selection = resolved or cls.describe_active(repository)
+        if provider is not None or model_name is not None:
+            environment = RuntimeModelResolver().resolve()
+            selection = ResolvedModel(
+                provider_id=None,
+                provider_name=provider or environment.provider_name,
+                provider_type=provider or environment.provider_type,
+                model=model_name or environment.model,
+                base_url=environment.base_url,
+                api_key=environment.api_key,
+                source="environment",
             )
-        elif provider == "deepseek":
-            # DeepSeek is OpenAI-compatible
-            return ChatOpenAI(
-                model=model_name,
-                temperature=0.7,
-                streaming=False,
-                api_key=os.getenv("DEEPSEEK_API_KEY"),
-                base_url="https://api.deepseek.com"
-            )
-        elif provider == "modelscope":
-            # ModelScope is OpenAI-compatible
-            return ChatOpenAI(
-                model=model_name,
-                temperature=0.7,
-                streaming=False,
-                api_key=os.getenv("MODELSCOPE_API_KEY"),
-                base_url=os.getenv("MODELSCOPE_BASE_URL", "https://api-inference.modelscope.cn/v1")
-            )
-        elif provider == "anthropic":
-            return ChatAnthropic(
-                model=model_name,
-                temperature=0.7,
-                streaming=False,
-                api_key=os.getenv("ANTHROPIC_API_KEY")
-            )
-        else:
-            raise ValueError(f"Unsupported LLM provider: {provider}")
+
+        if selection.provider_type == "anthropic":
+            kwargs = {
+                "model": selection.model,
+                "temperature": 0.7,
+                "streaming": False,
+                "api_key": selection.api_key,
+            }
+            if selection.base_url:
+                kwargs["base_url"] = selection.base_url
+            return ChatAnthropic(**kwargs)
+
+        kwargs = {
+            "model": selection.model,
+            "temperature": 0.7,
+            "streaming": False,
+            "api_key": selection.api_key,
+        }
+        if selection.base_url:
+            kwargs["base_url"] = selection.base_url
+        return ChatOpenAI(**kwargs)

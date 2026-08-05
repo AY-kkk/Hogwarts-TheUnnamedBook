@@ -15,17 +15,14 @@ class IntentSchema(BaseModel):
 
 class IntentAnalyzer:
     def __init__(self):
-        # We can use a smaller/faster model here if desired, e.g. gpt-3.5-turbo
-        self.llm = LLMFactory.create_llm()
         self.parser = JsonOutputParser(pydantic_object=IntentSchema)
         
         self.prompt = ChatPromptTemplate.from_template(prompt_service.get_template("intent"))
         
-        self.chain = self.prompt | self.llm | self.parser
-
     async def analyze(self, user_input: str, context: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            result = await self.chain.ainvoke({
+            chain = self.prompt | LLMFactory.create_llm() | self.parser
+            result = await chain.ainvoke({
                 "user_input": user_input, 
                 "context_summary": context.get("summary", "")
             })

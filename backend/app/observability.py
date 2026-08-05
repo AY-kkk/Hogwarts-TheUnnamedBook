@@ -98,12 +98,16 @@ class CostSettings:
 
 
 def estimate_token_cost(input_characters: int, output_characters: int, settings: CostSettings) -> float:
-    input_tokens = math.ceil(max(0, input_characters) / 4)
-    output_tokens = math.ceil(max(0, output_characters) / 4)
+    input_tokens = estimate_tokens(input_characters)
+    output_tokens = estimate_tokens(output_characters)
     return (
         input_tokens * settings.input_cost_per_million_tokens
         + output_tokens * settings.output_cost_per_million_tokens
     ) / 1_000_000
+
+
+def estimate_tokens(characters: int) -> int:
+    return math.ceil(max(0, characters) / 4)
 
 
 @dataclass(frozen=True)

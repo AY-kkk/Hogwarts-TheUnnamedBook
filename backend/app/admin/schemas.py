@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 ProviderPreset = Literal["openai", "deepseek", "minimax", "glm", "custom"]
-UsageOutcome = Literal["success", "error", "timeout", "cancelled"]
+UsageOutcome = Literal["success", "error", "timeout", "cancelled", "blocked"]
 
 
 def validate_model_id(value: str) -> str:

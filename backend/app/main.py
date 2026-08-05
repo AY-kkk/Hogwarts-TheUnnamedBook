@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Any, Dict, Literal
+from dataclasses import dataclass
 import time
 import asyncio
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -22,6 +23,7 @@ from app.observability import (
     SessionBudgetExceeded,
     SessionBudgetTracker,
     estimate_token_cost,
+    estimate_tokens,
     log_event,
     new_request_id,
     request_id_context,
@@ -32,7 +34,14 @@ from app.game_rules import RuleContextError, validate_status_snapshot
 from app.admin.compatible_client import OpenAICompatibleClient
 from app.admin.repository import ModelConfigRepository
 from app.admin.router import create_admin_router
+from app.admin.schemas import UsageRecord
 from app.admin.settings import AdminSettings
+from app.services.llm_factory import LLMFactory
+from app.services.runtime_model import (
+    ResolvedModel,
+    bind_runtime_model,
+    reset_runtime_model,
+)
 
 security_settings = SecuritySettings.from_env()
 admin_settings = AdminSettings.from_env()
@@ -44,6 +53,7 @@ compatible_client = OpenAICompatibleClient(
     app_env=admin_settings.app_env,
     allow_private_endpoints=admin_settings.allow_private_endpoints,
 )
+LLMFactory.configure_repository(model_repository)
 session_tokens = SessionTokenManager(
     security_settings.session_secret,
     security_settings.session_ttl_seconds,
@@ -61,8 +71,6 @@ budget_tracker = SessionBudgetTracker(cost_settings.session_budget_usd)
 metrics = MetricsRegistry()
 app_started_at = time.time()
 app_version = os.getenv("APP_VERSION", "dev")
-model_provider = os.getenv("LLM_PROVIDER", "openai")
-model_name = os.getenv("LLM_MODEL_NAME", "gpt-4o")
 metrics_token = os.getenv("METRICS_TOKEN", "development-metrics-token").strip()
 if security_settings.app_env == "production" and len(metrics_token) < 32:
     raise RuntimeError("METRICS_TOKEN must contain at least 32 characters in production")
@@ -198,21 +206,40 @@ async def require_api_access(request: Request) -> str:
     return session_id
 
 
-def reserve_ai_budget(session_id: str, input_characters: int, expected_output_characters: int):
+@dataclass(frozen=True)
+class AIRequestReservation:
+    budget_reservation: Any
+    resolved_model: ResolvedModel
+    started_at: float
+    request_id: str
+
+
+def reserve_ai_budget(
+    session_id: str,
+    input_characters: int,
+    expected_output_characters: int,
+) -> AIRequestReservation:
+    resolved_model = LLMFactory.describe_active()
     estimated_cost = estimate_token_cost(
         input_characters,
         expected_output_characters,
         cost_settings,
     )
     try:
-        return budget_tracker.reserve(session_id, estimated_cost)
+        budget_reservation = budget_tracker.reserve(session_id, estimated_cost)
     except SessionBudgetExceeded as exc:
-        metrics.increment("ai_budget_rejections_total", model=model_name)
+        metrics.increment("ai_budget_rejections_total", model=resolved_model.model)
         raise HTTPException(status_code=429, detail="Anonymous session AI budget exhausted") from exc
+    return AIRequestReservation(
+        budget_reservation=budget_reservation,
+        resolved_model=resolved_model,
+        started_at=time.perf_counter(),
+        request_id=request_id_context.get(),
+    )
 
 
 def settle_ai_budget(
-    reservation,
+    reservation: AIRequestReservation,
     endpoint: str,
     input_characters: int,
     output_characters: int | None,
@@ -221,29 +248,50 @@ def settle_ai_budget(
     actual_cost = None
     if output_characters is not None:
         actual_cost = estimate_token_cost(input_characters, output_characters, cost_settings)
-    session_total = budget_tracker.settle(reservation, actual_cost)
-    charged_cost = reservation.amount_usd if actual_cost is None else actual_cost
+    session_total = budget_tracker.settle(reservation.budget_reservation, actual_cost)
+    charged_cost = (
+        reservation.budget_reservation.amount_usd if actual_cost is None else actual_cost
+    )
+    resolved = reservation.resolved_model
     metrics.increment(
         "ai_requests_total",
         endpoint=endpoint,
-        model=model_name,
+        model=resolved.model,
         outcome=outcome,
     )
     metrics.increment(
         "ai_estimated_cost_usd_total",
         charged_cost,
         endpoint=endpoint,
-        model=model_name,
+        model=resolved.model,
     )
     log_event(
         "ai_request",
         endpoint=endpoint,
-        provider=model_provider,
-        model=model_name,
+        provider=resolved.provider_name,
+        model=resolved.model,
         outcome=outcome,
         estimated_cost_usd=round(charged_cost, 6),
         session_estimated_cost_usd=round(session_total, 6),
     )
+    try:
+        model_repository.record_usage(
+            UsageRecord(
+                endpoint=endpoint,
+                provider_id=resolved.provider_id,
+                provider_name=resolved.provider_name,
+                model=resolved.model,
+                outcome=outcome,
+                latency_ms=max(
+                    0, round((time.perf_counter() - reservation.started_at) * 1000)
+                ),
+                input_tokens=estimate_tokens(input_characters),
+                output_tokens=estimate_tokens(output_characters or 0),
+                request_id=reservation.request_id,
+            )
+        )
+    except Exception:
+        log_event("usage_record_failed", endpoint=endpoint, model=resolved.model)
 
 
 def require_safe_content(text: str) -> None:
@@ -278,13 +326,15 @@ def _normalize_chapter_title(text: str) -> str:
 
 @app.get("/health")
 async def health_check():
+    resolved = LLMFactory.describe_active()
     return {
         "status": "ok",
         "timestamp": time.time(),
         "version": app_version,
         "uptime_seconds": round(time.time() - app_started_at, 1),
-        "model_provider": model_provider,
-        "model": model_name,
+        "model_provider": resolved.provider_name,
+        "model": resolved.model,
+        "model_source": resolved.source,
         "prompt_version": prompt_service.prompt_version,
         "rules_version": prompt_service.rules_version,
         "state_schema_version": prompt_service.state_schema_version,
@@ -319,32 +369,38 @@ async def start_story(request: StoryStartRequest, _session_id: str = Depends(req
     require_safe_content(" ".join(str(value) for value in profile.values()))
     input_characters = len(json.dumps(profile, ensure_ascii=False))
     reservation = reserve_ai_budget(_session_id, input_characters, 8000)
+    model_token = bind_runtime_model(reservation.resolved_model)
     try:
         narrative = await generate_prologue(profile, request.profile.self_description)
     except Exception:
         settle_ai_budget(reservation, "story_start", input_characters, None, "error")
         raise
+    finally:
+        reset_runtime_model(model_token)
     narrative, outcome = moderate_generated_content(narrative)
     settle_ai_budget(reservation, "story_start", input_characters, len(narrative), outcome)
     return {
         "narrative": narrative,
         "metadata": prompt_service.metadata()
-        | {"model": model_name, "request_id": request_id_context.get()},
+        | {
+            "model": reservation.resolved_model.model,
+            "provider": reservation.resolved_model.provider_name,
+            "request_id": request_id_context.get(),
+        },
     }
 
 @app.post("/api/chapter/title", response_model=ChapterTitleResponse)
 async def chapter_title(request: ChapterTitleRequest, _session_id: str = Depends(require_api_access)):
-    from app.services.llm_factory import LLMFactory
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
 
-    llm = LLMFactory.create_llm()
     require_safe_content(request.user_input)
     prompt = ChatPromptTemplate.from_template(prompt_service.get_template("chapter_title"))
-    chain = prompt | llm | StrOutputParser()
     input_characters = len(request.user_input) + len(request.context_summary)
     reservation = reserve_ai_budget(_session_id, input_characters, 200)
+    model_token = bind_runtime_model(reservation.resolved_model)
     try:
+        chain = prompt | LLMFactory.create_llm() | StrOutputParser()
         raw = await chain.ainvoke({
             "user_input": request.user_input,
             "context_summary": request.context_summary
@@ -352,6 +408,8 @@ async def chapter_title(request: ChapterTitleRequest, _session_id: str = Depends
     except Exception:
         settle_ai_budget(reservation, "chapter_title", input_characters, None, "error")
         raise
+    finally:
+        reset_runtime_model(model_token)
     settle_ai_budget(reservation, "chapter_title", input_characters, len(raw), "success")
     return {"title": _normalize_chapter_title(raw)}
 
@@ -372,6 +430,7 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
     async def event_generator():
         task = None
         settled = False
+        model_token = bind_runtime_model(reservation.resolved_model)
 
         def settle(outcome: str, output_characters: int | None = None):
             nonlocal settled
@@ -427,7 +486,8 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
 
             metadata = {
                 **prompt_service.metadata(),
-                "model": model_name,
+                "model": reservation.resolved_model.model,
+                "provider": reservation.resolved_model.provider_name,
                 "orchestration_trace": final_state.get("orchestration_trace", []),
                 "request_id": request_id_context.get(),
             }
@@ -451,6 +511,8 @@ async def chat_endpoint(request: ChatRequest, _session_id: str = Depends(require
             settle("error")
             yield "event: error\ndata: generation_failed\n\n"
             yield "event: close\n\n"
+        finally:
+            reset_runtime_model(model_token)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

@@ -6,6 +6,7 @@ from app.observability import (
     SessionBudgetExceeded,
     SessionBudgetTracker,
     estimate_token_cost,
+    estimate_tokens,
 )
 
 
@@ -35,6 +36,13 @@ def test_cost_estimate_uses_configured_rates():
     )
 
     assert estimate_token_cost(400, 800, settings) == pytest.approx(0.0018)
+
+
+def test_token_estimate_rounds_up_and_never_goes_negative():
+    assert estimate_tokens(0) == 0
+    assert estimate_tokens(1) == 1
+    assert estimate_tokens(5) == 2
+    assert estimate_tokens(-10) == 0
 
 
 def test_metrics_render_only_aggregated_labels_and_values():
