@@ -146,7 +146,7 @@ Run: `cd backend && ../.venv-security/bin/python -m pytest -q tests/test_model_r
 
 Expected: collection fails because repository types are missing.
 
-- [ ] **Step 3: Add `cryptography==46.0.5` and implement focused sqlite3 repository**
+- [ ] **Step 3: Add `cryptography==50.0.0` and implement focused sqlite3 repository**
 
 ```python
 class ModelConfigRepository:
