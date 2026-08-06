@@ -21,6 +21,42 @@ class AdminSessionError(ValueError):
     """Raised when an administrator session is absent, invalid or expired."""
 
 
+class AdminPasswordHasher:
+    """Hashes the single persisted administrator password with a unique salt."""
+
+    _prefix = "scrypt-v1"
+
+    @staticmethod
+    def _derive(password: str, salt: bytes) -> bytes:
+        return hashlib.scrypt(
+            password.encode("utf-8"),
+            salt=salt,
+            n=2**14,
+            r=8,
+            p=1,
+            dklen=32,
+        )
+
+    @classmethod
+    def hash_password(cls, password: str) -> str:
+        salt = secrets.token_bytes(16)
+        digest = cls._derive(password, salt)
+        return f"{cls._prefix}${_base64url_encode(salt)}${_base64url_encode(digest)}"
+
+    @classmethod
+    def verify_password(cls, password: str, encoded_hash: str) -> bool:
+        try:
+            prefix, encoded_salt, encoded_digest = encoded_hash.split("$", 2)
+            if prefix != cls._prefix:
+                return False
+            salt = _base64url_decode(encoded_salt)
+            expected_digest = _base64url_decode(encoded_digest)
+            actual_digest = cls._derive(password, salt)
+        except (TypeError, ValueError, UnicodeEncodeError):
+            return False
+        return hmac.compare_digest(actual_digest, expected_digest)
+
+
 class AdminAuthenticator:
     def __init__(self, username: str, password: str, secret: str):
         self._username = username.encode("utf-8")
@@ -89,4 +125,3 @@ class AdminSessionManager:
         if expires_at <= current_time:
             raise AdminSessionError("expired admin session token")
         return username
-

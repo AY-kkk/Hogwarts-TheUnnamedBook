@@ -43,8 +43,8 @@ def _validate_fernet_key(value: str) -> str:
 @dataclass(frozen=True)
 class AdminSettings:
     app_env: str
-    username: str
-    password: str
+    username: str | None
+    password: str | None
     session_secret: str
     session_ttl_seconds: int
     encryption_key: str
@@ -58,16 +58,17 @@ class AdminSettings:
         app_env = os.getenv("APP_ENV", "development").strip().lower()
         is_production = app_env == "production"
 
-        username = os.getenv("ADMIN_USERNAME", "").strip()
-        password = os.getenv("ADMIN_PASSWORD", "")
+        username = os.getenv("ADMIN_USERNAME", "").strip() or None
+        password = os.getenv("ADMIN_PASSWORD", "") or None
         session_secret = os.getenv("ADMIN_SESSION_SECRET", "").strip()
         encryption_key = os.getenv("MODEL_CONFIG_ENCRYPTION_KEY", "").strip()
 
+        if bool(username) != bool(password):
+            raise RuntimeError("ADMIN_USERNAME and ADMIN_PASSWORD must be configured together")
+        if password is not None and len(password) < 12:
+            raise RuntimeError("ADMIN_PASSWORD must contain at least 12 characters")
+
         if is_production:
-            if not username:
-                raise RuntimeError("ADMIN_USERNAME is required in production")
-            if len(password) < 12:
-                raise RuntimeError("ADMIN_PASSWORD must contain at least 12 characters in production")
             if len(session_secret) < 32:
                 raise RuntimeError(
                     "ADMIN_SESSION_SECRET must contain at least 32 characters in production"
@@ -75,8 +76,6 @@ class AdminSettings:
             if not encryption_key:
                 raise RuntimeError("MODEL_CONFIG_ENCRYPTION_KEY is required in production")
         else:
-            username = username or "admin"
-            password = password or "change-this-local-password"
             session_secret = session_secret or "development-only-admin-session-secret"
             if not encryption_key:
                 digest = hashlib.sha256(session_secret.encode("utf-8")).digest()
@@ -98,4 +97,3 @@ class AdminSettings:
             login_rate_limit=_positive_int("ADMIN_LOGIN_LIMIT", 5),
             login_rate_window_seconds=_positive_int("ADMIN_LOGIN_WINDOW_SECONDS", 300),
         )
-

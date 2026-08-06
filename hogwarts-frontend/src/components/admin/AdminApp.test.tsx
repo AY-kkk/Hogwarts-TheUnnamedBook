@@ -11,9 +11,11 @@ const api = vi.hoisted(() => ({
   createProvider: vi.fn(),
   deleteProvider: vi.fn(),
   discoverModels: vi.fn(),
+  getAdminBootstrapStatus: vi.fn(),
   getAdminSession: vi.fn(),
   getAudit: vi.fn(),
   getUsage: vi.fn(),
+  initializeAdmin: vi.fn(),
   listProviders: vi.fn(),
   testProvider: vi.fn(),
   updateProvider: vi.fn(),
@@ -57,6 +59,7 @@ describe('administrator console', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.getAdminSession.mockResolvedValue({ authenticated: true, username: 'owner' });
+    api.getAdminBootstrapStatus.mockResolvedValue({ registration_open: false });
     api.listProviders.mockResolvedValue([]);
     api.getUsage.mockResolvedValue(emptyUsage);
     api.getAudit.mockResolvedValue([]);
@@ -111,6 +114,52 @@ describe('administrator console', () => {
 
     expect(await screen.findByRole('button', { name: '添加供应商' })).toBeInTheDocument();
     expect(api.adminLogin).toHaveBeenCalledWith('owner', 'correct-password');
+  });
+
+  it('lets the first owner initialize the administrator account only while setup is open', async () => {
+    api.getAdminSession.mockResolvedValue({ authenticated: false, username: null });
+    api.getAdminBootstrapStatus.mockResolvedValue({ registration_open: true });
+    api.initializeAdmin.mockResolvedValue({ authenticated: true, username: 'first-owner' });
+
+    render(<AdminApp />);
+
+    expect(await screen.findByRole('heading', { name: '初始化管理员' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('管理员用户名'), {
+      target: { value: 'first-owner' },
+    });
+    fireEvent.change(screen.getByLabelText('管理员密码'), {
+      target: { value: 'correct-password' },
+    });
+    fireEvent.change(screen.getByLabelText('确认管理员密码'), {
+      target: { value: 'correct-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '创建管理员并进入管理台' }));
+
+    expect(await screen.findByRole('button', { name: '添加供应商' })).toBeInTheDocument();
+    expect(api.initializeAdmin).toHaveBeenCalledWith('first-owner', 'correct-password');
+  });
+
+  it('returns to normal login rather than setup after the first owner signs out', async () => {
+    api.getAdminSession.mockResolvedValue({ authenticated: false, username: null });
+    api.getAdminBootstrapStatus.mockResolvedValue({ registration_open: true });
+    api.initializeAdmin.mockResolvedValue({ authenticated: true, username: 'first-owner' });
+
+    render(<AdminApp />);
+
+    fireEvent.change(await screen.findByLabelText('管理员用户名'), {
+      target: { value: 'first-owner' },
+    });
+    fireEvent.change(screen.getByLabelText('管理员密码'), {
+      target: { value: 'correct-password' },
+    });
+    fireEvent.change(screen.getByLabelText('确认管理员密码'), {
+      target: { value: 'correct-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '创建管理员并进入管理台' }));
+    fireEvent.click(await screen.findByRole('button', { name: '退出' }));
+
+    expect(await screen.findByRole('heading', { name: '管理员验证' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('确认管理员密码')).not.toBeInTheDocument();
   });
 
   it('keeps manual entry available when model discovery fails', async () => {

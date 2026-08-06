@@ -1,26 +1,39 @@
 import { useState, type FormEvent } from 'react';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 
-import { adminLogin, type AdminSession } from '../../services/adminApi';
+import { adminLogin, initializeAdmin, type AdminSession } from '../../services/adminApi';
 
 interface AdminLoginProps {
+  registrationOpen: boolean;
   onAuthenticated: (session: AdminSession) => void;
 }
 
-export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
+export function AdminLogin({ registrationOpen, onAuthenticated }: AdminLoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
+    if (registrationOpen && password !== confirmation) {
+      setError('两次输入的管理员密码不一致');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await adminLogin(username, password);
+      let session: AdminSession;
+      if (registrationOpen) {
+        session = await initializeAdmin(username, password);
+      } else {
+        await adminLogin(username, password);
+        session = { authenticated: true, username };
+      }
       setPassword('');
-      onAuthenticated({ authenticated: true, username });
+      setConfirmation('');
+      onAuthenticated(session);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '登录失败，请稍后重试');
     } finally {
@@ -50,8 +63,12 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
         <div className="admin-login-heading">
           <KeyRound size={22} strokeWidth={1.8} aria-hidden="true" />
           <div>
-            <h2 id="admin-login-title">管理员验证</h2>
-            <p>凭据只会发送到当前产品后端。</p>
+            <h2 id="admin-login-title">{registrationOpen ? '初始化管理员' : '管理员验证'}</h2>
+            <p>
+              {registrationOpen
+                ? '这是首次部署的唯一注册机会，创建后入口会自动关闭。'
+                : '凭据只会发送到当前产品后端。'}
+            </p>
           </div>
         </div>
         <form onSubmit={submit} className="admin-form">
@@ -65,6 +82,20 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
               required
             />
           </label>
+          {registrationOpen && (
+            <label className="admin-field">
+              <span>确认管理员密码</span>
+              <input
+                aria-label="确认管理员密码"
+                type="password"
+                autoComplete="new-password"
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+                disabled={isSubmitting}
+                required
+              />
+            </label>
+          )}
           <label className="admin-field">
             <span>管理员密码</span>
             <input
@@ -80,11 +111,16 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
             {error}
           </p>
           <button className="admin-button admin-button-primary admin-button-wide" disabled={isSubmitting}>
-            {isSubmitting ? '正在验证' : '进入管理台'}
+            {isSubmitting
+              ? registrationOpen
+                ? '正在创建'
+                : '正在验证'
+              : registrationOpen
+                ? '创建管理员并进入管理台'
+                : '进入管理台'}
           </button>
         </form>
       </section>
     </main>
   );
 }
-

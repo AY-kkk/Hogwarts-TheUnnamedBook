@@ -9,6 +9,7 @@ import {
   deleteProvider,
   discoverModels,
   getAdminSession,
+  getAdminBootstrapStatus,
   getAudit,
   getUsage,
   listProviders,
@@ -35,19 +36,29 @@ function messageFrom(error: unknown): string {
 
 export function AdminApp() {
   const [session, setSession] = useState<AdminSession | null>(null);
+  const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
   const [bootError, setBootError] = useState('');
 
   useEffect(() => {
     document.title = '模型控制室 | The Unnamed Book';
-    void getAdminSession()
-      .then(setSession)
+    void Promise.all([getAdminSession(), getAdminBootstrapStatus()])
+      .then(([nextSession, bootstrap]) => {
+        setSession(nextSession);
+        setRegistrationOpen(bootstrap.registration_open);
+      })
       .catch((error) => {
         setBootError(messageFrom(error));
         setSession({ authenticated: false, username: null });
+        setRegistrationOpen(false);
       });
   }, []);
 
-  if (session === null) {
+  function handleAuthenticated(nextSession: AdminSession) {
+    setSession(nextSession);
+    if (nextSession.authenticated) setRegistrationOpen(false);
+  }
+
+  if (session === null || registrationOpen === null) {
     return (
       <main className="admin-boot" aria-live="polite">
         <ShieldCheck size={34} strokeWidth={1.6} />
@@ -60,7 +71,7 @@ export function AdminApp() {
     return (
       <>
         {bootError && <p className="admin-global-error">{bootError}</p>}
-        <AdminLogin onAuthenticated={setSession} />
+        <AdminLogin registrationOpen={registrationOpen} onAuthenticated={handleAuthenticated} />
       </>
     );
   }

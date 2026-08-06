@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import hmac
 from collections.abc import Sequence
 from typing import Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
 
-from app.admin.auth import AdminAuthenticator, AdminSessionError, AdminSessionManager
+from app.admin.auth import AdminPasswordHasher, AdminSessionError, AdminSessionManager
 from app.admin.compatible_client import OpenAICompatibleClient, OpenAICompatibleError
 from app.admin.endpoint_policy import EndpointPolicyError, validate_provider_url
 from app.admin.repository import (
     ActiveProviderError,
+    AdminAlreadyInitializedError,
     ModelConfigRepository,
     ProviderConflictError,
     ProviderDisabledError,
@@ -50,6 +52,23 @@ class AdminSessionResponse(BaseModel):
     username: str | None
 
 
+class InitializeAdministratorRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=12, max_length=1024)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 3:
+            raise ValueError("administrator username must contain at least 3 characters")
+        return normalized
+
+
+class BootstrapStatusResponse(BaseModel):
+    registration_open: bool
+
+
 class ModelSelectionRequest(BaseModel):
     model: str | None = None
 
@@ -66,7 +85,15 @@ class DiscoveredModelsResponse(BaseModel):
 def _to_http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ProviderNotFoundError):
         return HTTPException(status_code=404, detail="Provider not found")
-    if isinstance(exc, (ActiveProviderError, ProviderConflictError, ProviderDisabledError)):
+    if isinstance(
+        exc,
+        (
+            ActiveProviderError,
+            AdminAlreadyInitializedError,
+            ProviderConflictError,
+            ProviderDisabledError,
+        ),
+    ):
         return HTTPException(status_code=409, detail=str(exc))
     if isinstance(exc, EndpointPolicyError):
         return HTTPException(status_code=422, detail=str(exc))
@@ -95,11 +122,20 @@ def create_admin_router(
     allowed_origins: Sequence[str],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/admin", tags=["admin"])
-    authenticator = AdminAuthenticator(
-        settings.username, settings.password, settings.session_secret
-    )
+    password_hasher = AdminPasswordHasher()
+    if settings.username and settings.password and not repository.has_administrator():
+        try:
+            repository.initialize_administrator(
+                settings.username,
+                password_hasher.hash_password(settings.password),
+            )
+        except AdminAlreadyInitializedError:
+            pass
     sessions = AdminSessionManager(settings.session_secret, settings.session_ttl_seconds)
     login_limiter = FixedWindowRateLimiter(
+        settings.login_rate_limit, settings.login_rate_window_seconds
+    )
+    bootstrap_limiter = FixedWindowRateLimiter(
         settings.login_rate_limit, settings.login_rate_window_seconds
     )
     normalized_origins = {origin.rstrip("/") for origin in allowed_origins}
@@ -120,6 +156,53 @@ def create_admin_router(
                 status_code=401, detail="Invalid or expired administrator session"
             ) from exc
 
+    def issue_admin_cookie(response: Response, username: str) -> None:
+        token, ttl = sessions.issue(username)
+        response.set_cookie(
+            ADMIN_COOKIE_NAME,
+            token,
+            max_age=ttl,
+            httponly=True,
+            secure=settings.app_env == "production",
+            samesite="lax",
+            path="/api/admin",
+        )
+
+    @router.get("/bootstrap", response_model=BootstrapStatusResponse)
+    def bootstrap_status() -> BootstrapStatusResponse:
+        return BootstrapStatusResponse(registration_open=not repository.has_administrator())
+
+    @router.post(
+        "/bootstrap",
+        response_model=AdminSessionResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def initialize_administrator(
+        payload: InitializeAdministratorRequest,
+        request: Request,
+        response: Response,
+    ) -> AdminSessionResponse:
+        require_origin(request)
+        client_host = request.client.host if request.client else "unknown"
+        retry_after = bootstrap_limiter.consume(client_host)
+        if retry_after is not None:
+            raise HTTPException(
+                status_code=429,
+                detail="Administrator initialization rate limit exceeded",
+                headers={"Retry-After": str(retry_after)},
+            )
+        try:
+            repository.initialize_administrator(
+                payload.username,
+                password_hasher.hash_password(payload.password),
+            )
+        except Exception as exc:
+            repository.record_audit("admin.initialize", payload.username, "failure")
+            raise _to_http_error(exc) from exc
+        issue_admin_cookie(response, payload.username)
+        repository.record_audit("admin.initialize", payload.username, "success")
+        return AdminSessionResponse(authenticated=True, username=payload.username)
+
     @router.post("/session", status_code=status.HTTP_204_NO_CONTENT)
     def login(payload: LoginRequest, request: Request, response: Response) -> None:
         require_origin(request)
@@ -131,19 +214,17 @@ def create_admin_router(
                 detail="Administrator login rate limit exceeded",
                 headers={"Retry-After": str(retry_after)},
             )
-        if not authenticator.authenticate(payload.username, payload.password):
+        credentials = repository.get_administrator_credentials()
+        username_ok = credentials is not None and hmac.compare_digest(
+            payload.username, credentials[0]
+        )
+        password_ok = credentials is not None and password_hasher.verify_password(
+            payload.password, credentials[1]
+        )
+        if not username_ok or not password_ok:
             repository.record_audit("session.login", None, "failure")
             raise HTTPException(status_code=401, detail="Invalid administrator credentials")
-        token, ttl = sessions.issue(settings.username)
-        response.set_cookie(
-            ADMIN_COOKIE_NAME,
-            token,
-            max_age=ttl,
-            httponly=True,
-            secure=settings.app_env == "production",
-            samesite="lax",
-            path="/api/admin",
-        )
+        issue_admin_cookie(response, credentials[0])
         repository.record_audit("session.login", None, "success")
 
     @router.get("/session", response_model=AdminSessionResponse)
@@ -299,4 +380,3 @@ def create_admin_router(
         return repository.list_audit(limit)
 
     return router
-

@@ -17,6 +17,7 @@ import { hasPrivacyConsent } from './services/privacy';
 import { touchCharacter } from './services/characters';
 import { AgeGate } from './components/compliance/AgeGate';
 import { hasAgeAcknowledgement } from './services/safety';
+import { AdminEntryLink } from './components/admin/AdminEntryLink';
 
 type AppState = 'landing' | 'selection' | 'create' | 'game';
 
@@ -101,6 +102,7 @@ function App() {
   const withPrivacyControls = (content: ReactNode) => (
     <>
       {content}
+      <AdminEntryLink />
       <button
         type="button"
         onClick={() => {

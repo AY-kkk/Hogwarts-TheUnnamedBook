@@ -6,8 +6,10 @@ import {
   adminLogin,
   adminLogout,
   discoverModels,
+  getAdminBootstrapStatus,
   getAdminSession,
   getUsage,
+  initializeAdmin,
   testProvider,
   updateProvider,
   type ModelProvider,
@@ -54,6 +56,25 @@ describe('administrator API client', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ detail: 'expired' }, 401));
 
     await expect(getUsage('24h')).rejects.toBeInstanceOf(AdminAuthenticationError);
+  });
+
+  it('reads first-run setup status and initializes the first administrator with cookies', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ registration_open: true }))
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true, username: 'first-owner' }, 201));
+
+    await expect(getAdminBootstrapStatus()).resolves.toEqual({ registration_open: true });
+    await expect(initializeAdmin('first-owner', 'correct-password')).resolves.toEqual({
+      authenticated: true,
+      username: 'first-owner',
+    });
+
+    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
+      '/api/admin/bootstrap',
+      '/api/admin/bootstrap',
+    ]);
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'POST', credentials: 'include' });
   });
 
   it('supports login, session, discovery, test, activation and logout paths', async () => {

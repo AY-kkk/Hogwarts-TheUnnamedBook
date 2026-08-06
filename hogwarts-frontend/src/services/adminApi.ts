@@ -8,6 +8,10 @@ export interface AdminSession {
   username: string | null;
 }
 
+export interface AdminBootstrapStatus {
+  registration_open: boolean;
+}
+
 export interface ModelProvider {
   id: string;
   name: string;
@@ -119,6 +123,17 @@ export function adminLogin(username: string, password: string): Promise<void> {
 
 export function getAdminSession(): Promise<AdminSession> {
   return adminRequest('/session');
+}
+
+export function getAdminBootstrapStatus(): Promise<AdminBootstrapStatus> {
+  return adminRequest('/bootstrap');
+}
+
+export function initializeAdmin(username: string, password: string): Promise<AdminSession> {
+  return adminRequest('/bootstrap', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
 }
 
 export function adminLogout(): Promise<void> {

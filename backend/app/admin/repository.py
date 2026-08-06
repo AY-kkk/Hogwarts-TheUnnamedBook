@@ -43,6 +43,10 @@ class ProviderDisabledError(ProviderConflictError):
     pass
 
 
+class AdminAlreadyInitializedError(RepositoryError):
+    pass
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -121,6 +125,14 @@ class ModelConfigRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_admin_audit_time
                     ON admin_audit(occurred_at DESC);
+
+                CREATE TABLE IF NOT EXISTS admin_credentials (
+                    id INTEGER PRIMARY KEY CHECK(id = 1),
+                    username TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
 
@@ -407,6 +419,47 @@ class ModelConfigRepository:
                 """,
                 (_timestamp(), action[:80], target_id, result[:40]),
             )
+
+    def has_administrator(self) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM admin_credentials WHERE id = 1"
+            ).fetchone()
+        return row is not None
+
+    def get_administrator_credentials(self) -> tuple[str, str] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT username, password_hash FROM admin_credentials WHERE id = 1"
+            ).fetchone()
+        if row is None:
+            return None
+        return row["username"], row["password_hash"]
+
+    def initialize_administrator(self, username: str, password_hash: str) -> None:
+        now = _timestamp()
+        try:
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                existing = connection.execute(
+                    "SELECT 1 FROM admin_credentials WHERE id = 1"
+                ).fetchone()
+                if existing is not None:
+                    raise AdminAlreadyInitializedError(
+                        "administrator has already been initialized"
+                    )
+                connection.execute(
+                    """
+                    INSERT INTO admin_credentials (
+                        id, username, password_hash, created_at, updated_at
+                    ) VALUES (1, ?, ?, ?, ?)
+                    """,
+                    (username, password_hash, now, now),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise AdminAlreadyInitializedError(
+                "administrator has already been initialized"
+            ) from exc
 
     def list_audit(self, limit: int = 50) -> list[AuditRecord]:
         safe_limit = min(max(limit, 1), 200)

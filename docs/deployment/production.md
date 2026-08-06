@@ -59,8 +59,8 @@ Minimum runtime variables:
 | `SESSION_ISSUE_LIMIT` | Session tokens issued per client/window | No |
 | `MAX_REQUEST_BYTES` | Maximum declared request body size | No |
 | `MAX_CONTEXT_CHARS` | Maximum serialized story context | No |
-| `ADMIN_USERNAME` | Single administrator username | Yes |
-| `ADMIN_PASSWORD` | Administrator password; production minimum 12 characters | Yes |
+| `ADMIN_USERNAME` | Optional deployment-time username to pre-seed the sole administrator; set together with `ADMIN_PASSWORD` or leave both unset for first-run setup | Yes, when set |
+| `ADMIN_PASSWORD` | Optional pre-seed password; production minimum 12 characters | Yes, when set |
 | `ADMIN_SESSION_SECRET` | Signs administrator cookies; production minimum 32 characters | Yes |
 | `MODEL_CONFIG_ENCRYPTION_KEY` | Fernet key encrypting provider API keys | Yes |
 | `MODEL_CONFIG_DB_PATH` | Persistent SQLite path; container default `/app/data/model-config.db` | No |
@@ -86,7 +86,9 @@ The container health endpoint is `GET /health`. Configure the platform health ch
 
 ## Model administrator
 
-Open `https://game.example.com/admin`, sign in, and add a provider. The browser never receives the full API key.
+The game UI always includes a **后台管理** entry that opens `https://game.example.com/admin`. On the first visit to a new persistent database, create the sole administrator there; the registration form closes atomically as soon as it succeeds. After that, the same entry is a normal sign-in screen for changing model configuration. The browser never receives the full provider API key.
+
+For unattended deployment, set both `ADMIN_USERNAME` and `ADMIN_PASSWORD` once. On startup, the API imports that pair into the encrypted configuration database only when no administrator exists. Do not remove the database volume or encryption key after setup: doing so would reopen first-run initialization.
 
 | Template | Editable Base URL | Notes |
 |---|---|---|
@@ -98,11 +100,12 @@ Open `https://game.example.com/admin`, sign in, and add a provider. The browser 
 
 Recommended first setup:
 
-1. Save a provider without activating it.
-2. Click model discovery. If the provider has no `/models` endpoint, enter the model ID manually.
-3. Run the connection test with the selected model.
-4. Activate it. New game requests use it immediately without restarting the API.
-5. Open the usage panel after a game request to verify provider, model, latency and estimated Token values.
+1. Open **后台管理** from the game and create the first administrator (username plus a 12-character-or-longer password).
+2. Save a provider without activating it.
+3. Click model discovery. If the provider has no `/models` endpoint, enter the model ID manually.
+4. Run the connection test with the selected model.
+5. Activate it. New game requests use it immediately without restarting the API.
+6. Open the usage panel after a game request to verify provider, model, latency and estimated Token values.
 
 The existing `LLM_PROVIDER`, `LLM_MODEL_NAME` and provider key variables remain a fallback only while no database provider is active. A broken active database configuration fails closed instead of silently switching providers.
 
@@ -135,7 +138,7 @@ To connect a local protocol simulator or local inference server, set `ALLOW_PRIV
 - The frontend bundle contains the production HTTPS API origin and no provider key.
 - `/health`, `/api/story/start`, `/api/chapter/title`, and `/api/chat` are reachable through HTTPS.
 - The configured CORS allowlist contains only approved frontend origins.
-- `/admin` can log in, save a provider, discover or manually enter a model, test and activate it.
+- The first `/admin` setup has been completed exactly once; subsequent visits require administrator sign-in, then can save a provider, discover or manually enter a model, test and activate it.
 - The backend has one writable persistent `/app/data` volume, and the SQLite file/key backup pair has been tested.
 - Container logs are collected by the platform and do not expose request bodies or secrets.
 - Character profiles and story history remain in the user's IndexedDB; the API is stateless and does not keep an in-memory profile registry.

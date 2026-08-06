@@ -74,6 +74,7 @@ def test_session_login_check_logout_and_origin_protection(admin_app) -> None:
     app, _ = admin_app
     with TestClient(app, base_url=ORIGIN) as client:
         assert client.get("/api/admin/session").json() == {"authenticated": False, "username": None}
+        assert client.get("/api/admin/bootstrap").json() == {"registration_open": False}
         denied = client.post(
             "/api/admin/session",
             json={"username": "owner", "password": "correct-password"},
@@ -207,3 +208,52 @@ def test_provider_routes_require_admin_cookie(admin_app) -> None:
         response = client.get("/api/admin/providers")
     assert response.status_code == 401
 
+
+def test_only_the_first_administrator_can_initialize_the_console(tmp_path: Path) -> None:
+    encryption_key = base64.urlsafe_b64encode(b"b" * 32).decode("ascii")
+    settings = AdminSettings(
+        app_env="test",
+        username=None,
+        password=None,
+        session_secret="admin-session-secret-with-at-least-32-characters",
+        session_ttl_seconds=3600,
+        encryption_key=encryption_key,
+        database_path=tmp_path / "bootstrap.db",
+        allow_private_endpoints=True,
+        login_rate_limit=5,
+        login_rate_window_seconds=60,
+    )
+    repository = ModelConfigRepository(settings.database_path, settings.encryption_key)
+    app = FastAPI()
+    app.include_router(
+        create_admin_router(
+            settings=settings,
+            repository=repository,
+            compatible_client=FakeCompatibleClient(),  # type: ignore[arg-type]
+            allowed_origins=(ORIGIN,),
+        )
+    )
+
+    with TestClient(app, base_url=ORIGIN) as client:
+        assert client.get("/api/admin/bootstrap").json() == {"registration_open": True}
+
+        initialized = client.post(
+            "/api/admin/bootstrap",
+            headers=WRITE_HEADERS,
+            json={"username": "first-owner", "password": "correct-password"},
+        )
+
+        assert initialized.status_code == 201
+        assert initialized.json() == {"authenticated": True, "username": "first-owner"}
+        assert client.get("/api/admin/session").json() == {
+            "authenticated": True,
+            "username": "first-owner",
+        }
+        assert client.get("/api/admin/bootstrap").json() == {"registration_open": False}
+
+        duplicate = client.post(
+            "/api/admin/bootstrap",
+            headers=WRITE_HEADERS,
+            json={"username": "second-owner", "password": "another-correct-password"},
+        )
+        assert duplicate.status_code == 409
