@@ -43,7 +43,7 @@ jobs:
       LEGAL_REVIEW_REFERENCE: ${{ vars.LEGAL_REVIEW_REFERENCE }}
       RELEASE_ONCALL_OWNER: ${{ vars.RELEASE_ONCALL_OWNER }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
