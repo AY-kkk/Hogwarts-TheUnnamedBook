@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@microsoft/fetch-event-source": "^2.0.1",
-    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-tabs": "^1.1.21",
     "clsx": "^2.1.1",
     "dexie": "^4.3.0",
     "dexie-react-hooks": "^4.2.0",
