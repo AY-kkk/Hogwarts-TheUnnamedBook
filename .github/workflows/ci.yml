@@ -23,7 +23,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: hogwarts-frontend/package-lock.json
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
